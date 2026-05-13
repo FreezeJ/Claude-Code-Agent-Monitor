@@ -60,9 +60,8 @@ class TranscriptCache {
 
       // File grew → incremental read from last position
       if (stat.size > cached.bytesRead) {
-        const newContent = this._readFrom(transcriptPath, cached.bytesRead, stat.size);
-        if (newContent) {
-          const incremental = this._parseContent(newContent);
+        const incremental = this._streamRange(transcriptPath, cached.bytesRead, stat.size);
+        if (incremental) {
           const merged = this._merge(cached, incremental);
           const hasTokens = Object.keys(merged.tokensByModel).length > 0;
           const hasTurnDurations = merged.turnDurations && merged.turnDurations.length > 0;
@@ -161,151 +160,279 @@ class TranscriptCache {
     return result.compaction.entries.map((e) => ({ ...e }));
   }
 
+  /**
+   * Full re-read using chunked streaming. Avoids materializing the whole file
+   * as a single JS string, so files larger than V8's max string length
+   * (~512 MiB on 64-bit Node) parse without aborting the process with
+   * "FATAL ERROR: v8::ToLocalChecked Empty MaybeLocal".
+   */
   _fullRead(filePath) {
-    const content = fs.readFileSync(filePath, "utf8");
-    return this._parseContent(content);
-  }
-
-  _readFrom(filePath, offset, totalSize) {
-    const len = totalSize - offset;
-    if (len <= 0) return null;
-    const buf = Buffer.alloc(len);
-    const fd = fs.openSync(filePath, "r");
-    let bytesRead;
+    let size;
     try {
-      bytesRead = fs.readSync(fd, buf, 0, len, offset);
-    } finally {
-      fs.closeSync(fd);
+      size = fs.statSync(filePath).size;
+    } catch {
+      return null;
     }
-    // If file was truncated between stat and read, only use actual bytes read
-    const usable = bytesRead < len ? buf.subarray(0, bytesRead) : buf;
-    return usable.toString("utf8");
+    return this._streamRange(filePath, 0, size);
   }
 
-  _parseContent(content) {
-    const tokensByModel = {};
-    let compaction = null;
-    const errors = [];
-    const turnDurations = [];
-    let thinkingBlockCount = 0;
-    const usageExtras = { service_tiers: new Set(), speeds: new Set(), inference_geos: new Set() };
-    // Track the model of the most recent assistant entry encountered in this
-    // content block. JSONL is append-only and parsed in file order, so the
-    // last value seen here is the user's *current* model — used downstream to
-    // keep session.model in sync when the user invokes /model mid-session.
-    let latestModel = null;
+  /**
+   * Sync chunked range reader + line parser.
+   * Reads [startOffset, endOffset) in fixed-size chunks, splits on 0x0A bytes,
+   * decodes each complete line as UTF-8 (safe: 0x0A never appears inside a
+   * UTF-8 multibyte sequence), and feeds it to _consumeLine. Partial trailing
+   * bytes between chunks are held in a byte buffer so multibyte characters
+   * straddling a chunk boundary are not corrupted. Never builds a string
+   * larger than a single line, so V8 string-length limits cannot be hit.
+   */
+  _streamRange(filePath, startOffset, endOffset) {
+    const state = this._initParseState();
+    if (endOffset <= startOffset) return this._finalizeState(state);
 
-    for (const line of content.split("\n")) {
-      if (!line) continue;
+    const CHUNK = 4 * 1024 * 1024; // 4 MiB
+    const MAX_PENDING = 64 * 1024 * 1024; // hard cap on a single line
+    const buf = Buffer.allocUnsafe(CHUNK);
+    let pending = null; // bytes of partial trailing line not yet terminated by \n
+    let pendingLen = 0;
+    let pos = startOffset;
+    let fd;
+    try {
       try {
-        const entry = JSON.parse(line);
-        if (entry.isCompactSummary) {
-          if (!compaction) compaction = { count: 0, entries: [] };
-          compaction.count++;
-          compaction.entries.push({
-            uuid: entry.uuid || null,
-            timestamp: entry.timestamp || null,
-          });
+        fd = fs.openSync(filePath, "r");
+      } catch {
+        return this._finalizeState(state);
+      }
+
+      while (pos < endOffset) {
+        const want = Math.min(CHUNK, endOffset - pos);
+        let got;
+        try {
+          got = fs.readSync(fd, buf, 0, want, pos);
+        } catch {
+          break;
+        }
+        if (got <= 0) break;
+        pos += got;
+
+        let lineStart = 0;
+        for (let i = 0; i < got; i++) {
+          if (buf[i] !== 0x0a) continue;
+
+          let line;
+          if (pendingLen) {
+            const need = pendingLen + (i - lineStart);
+            const lineBuf = Buffer.allocUnsafe(need);
+            pending.copy(lineBuf, 0, 0, pendingLen);
+            buf.copy(lineBuf, pendingLen, lineStart, i);
+            line = lineBuf.toString("utf8");
+            pending = null;
+            pendingLen = 0;
+          } else {
+            line = buf.toString("utf8", lineStart, i);
+          }
+          if (line.length && line.charCodeAt(line.length - 1) === 13) {
+            line = line.slice(0, -1); // strip CR
+          }
+          if (line) this._consumeLine(line, state);
+          lineStart = i + 1;
         }
 
-        // Turn duration tracking (system entries with subtype "turn_duration")
-        if (entry.type === "system" && entry.subtype === "turn_duration" && entry.durationMs) {
-          const turnTs = entry.timestamp
-            ? typeof entry.timestamp === "number"
-              ? new Date(entry.timestamp).toISOString()
-              : entry.timestamp
-            : null;
-          turnDurations.push({ durationMs: entry.durationMs, timestamp: turnTs });
-        }
-
-        // Detect API errors in transcript: error responses from Claude API
-        // (quota limits, rate limits, overloaded, auth errors, etc.)
-        const msg = entry.message || entry;
-        if (msg.type === "error" && msg.error) {
-          errors.push({
-            type: msg.error.type || "unknown_error",
-            message: msg.error.message || "Unknown API error",
-            timestamp: entry.timestamp || null,
-          });
-          continue;
-        }
-
-        // Detect isApiErrorMessage entries (quota limits, rate limits, etc.)
-        if (entry.isApiErrorMessage) {
-          const errContent = Array.isArray(entry.message?.content) ? entry.message.content : [];
-          const errText = errContent[0]?.text ? errContent[0].text.slice(0, 500) : "Unknown error";
-          errors.push({
-            type: entry.error || "unknown_error",
-            message: errText,
-            timestamp: entry.timestamp || null,
-          });
-          continue;
-        }
-
-        const model = msg.model;
-        if (!model || model === "<synthetic>" || !msg.usage) continue;
-        latestModel = model;
-        if (!tokensByModel[model]) {
-          tokensByModel[model] = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-        }
-        tokensByModel[model].input += msg.usage.input_tokens || 0;
-        tokensByModel[model].output += msg.usage.output_tokens || 0;
-        tokensByModel[model].cacheRead += msg.usage.cache_read_input_tokens || 0;
-        tokensByModel[model].cacheWrite += msg.usage.cache_creation_input_tokens || 0;
-
-        // Track usage extras (service_tier, speed, inference_geo)
-        if (msg.usage.service_tier) usageExtras.service_tiers.add(msg.usage.service_tier);
-        if (msg.usage.speed) usageExtras.speeds.add(msg.usage.speed);
-        if (msg.usage.inference_geo && msg.usage.inference_geo !== "not_available") {
-          usageExtras.inference_geos.add(msg.usage.inference_geo);
-        }
-
-        // Count thinking blocks in assistant message content
-        const msgContent = msg.content || [];
-        if (Array.isArray(msgContent)) {
-          for (const block of msgContent) {
-            if (block.type === "thinking") thinkingBlockCount++;
+        if (lineStart < got) {
+          const tailLen = got - lineStart;
+          const newLen = pendingLen + tailLen;
+          if (newLen > MAX_PENDING) {
+            // Pathological single line — drop accumulated bytes and skip
+            // forward to the next newline rather than OOM. Loss is bounded
+            // to one malformed line.
+            pending = null;
+            pendingLen = 0;
+          } else {
+            if (!pending) {
+              pending = Buffer.allocUnsafe(Math.max(newLen, 8192));
+            } else if (pending.length < newLen) {
+              const grow = Buffer.allocUnsafe(Math.max(newLen, pending.length * 2));
+              pending.copy(grow, 0, 0, pendingLen);
+              pending = grow;
+            }
+            buf.copy(pending, pendingLen, lineStart, got);
+            pendingLen = newLen;
           }
         }
-      } catch {
-        continue;
+      }
+
+      if (pendingLen) {
+        let line = pending.toString("utf8", 0, pendingLen);
+        if (line.length && line.charCodeAt(line.length - 1) === 13) {
+          line = line.slice(0, -1);
+        }
+        if (line) this._consumeLine(line, state);
+      }
+    } finally {
+      if (fd !== undefined) {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          /* ignore */
+        }
       }
     }
-    const hasTokens = Object.keys(tokensByModel).length > 0;
-    const hasErrors = errors.length > 0;
-    const hasTurnDurations = turnDurations.length > 0;
+
+    return this._finalizeState(state);
+  }
+
+  _initParseState() {
+    return {
+      tokensByModel: {},
+      compaction: null,
+      errors: [],
+      turnDurations: [],
+      thinkingBlockCount: 0,
+      usageExtras: {
+        service_tiers: new Set(),
+        speeds: new Set(),
+        inference_geos: new Set(),
+      },
+      // Track the model of the most recent assistant entry. JSONL is
+      // append-only and parsed in file order, so the last value seen here is
+      // the user's *current* model — used downstream to keep session.model in
+      // sync when the user invokes /model mid-session.
+      latestModel: null,
+    };
+  }
+
+  _consumeLine(line, state) {
+    if (!line) return;
+    let entry;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      return;
+    }
+
+    if (entry.isCompactSummary) {
+      if (!state.compaction) state.compaction = { count: 0, entries: [] };
+      state.compaction.count++;
+      state.compaction.entries.push({
+        uuid: entry.uuid || null,
+        timestamp: entry.timestamp || null,
+      });
+    }
+
+    if (entry.type === "system" && entry.subtype === "turn_duration" && entry.durationMs) {
+      const turnTs = entry.timestamp
+        ? typeof entry.timestamp === "number"
+          ? new Date(entry.timestamp).toISOString()
+          : entry.timestamp
+        : null;
+      state.turnDurations.push({ durationMs: entry.durationMs, timestamp: turnTs });
+    }
+
+    const msg = entry.message || entry;
+    if (msg.type === "error" && msg.error) {
+      state.errors.push({
+        type: msg.error.type || "unknown_error",
+        message: msg.error.message || "Unknown API error",
+        timestamp: entry.timestamp || null,
+      });
+      return;
+    }
+
+    if (entry.isApiErrorMessage) {
+      const errContent = Array.isArray(entry.message?.content) ? entry.message.content : [];
+      const errText = errContent[0]?.text ? errContent[0].text.slice(0, 500) : "Unknown error";
+      state.errors.push({
+        type: entry.error || "unknown_error",
+        message: errText,
+        timestamp: entry.timestamp || null,
+      });
+      return;
+    }
+
+    const model = msg.model;
+    if (!model || model === "<synthetic>" || !msg.usage) return;
+    state.latestModel = model;
+    if (!state.tokensByModel[model]) {
+      state.tokensByModel[model] = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    }
+    state.tokensByModel[model].input += msg.usage.input_tokens || 0;
+    state.tokensByModel[model].output += msg.usage.output_tokens || 0;
+    state.tokensByModel[model].cacheRead += msg.usage.cache_read_input_tokens || 0;
+    state.tokensByModel[model].cacheWrite += msg.usage.cache_creation_input_tokens || 0;
+
+    if (msg.usage.service_tier) state.usageExtras.service_tiers.add(msg.usage.service_tier);
+    if (msg.usage.speed) state.usageExtras.speeds.add(msg.usage.speed);
+    if (msg.usage.inference_geo && msg.usage.inference_geo !== "not_available") {
+      state.usageExtras.inference_geos.add(msg.usage.inference_geo);
+    }
+
+    const msgContent = msg.content || [];
+    if (Array.isArray(msgContent)) {
+      for (const block of msgContent) {
+        if (block.type === "thinking") state.thinkingBlockCount++;
+      }
+    }
+  }
+
+  _finalizeState(state) {
+    const hasTokens = Object.keys(state.tokensByModel).length > 0;
+    const hasErrors = state.errors.length > 0;
+    const hasTurnDurations = state.turnDurations.length > 0;
     const hasUsageExtras =
-      usageExtras.service_tiers.size > 0 ||
-      usageExtras.speeds.size > 0 ||
-      usageExtras.inference_geos.size > 0;
+      state.usageExtras.service_tiers.size > 0 ||
+      state.usageExtras.speeds.size > 0 ||
+      state.usageExtras.inference_geos.size > 0;
     if (
       !hasTokens &&
-      !compaction &&
+      !state.compaction &&
       !hasErrors &&
       !hasTurnDurations &&
-      !thinkingBlockCount &&
+      !state.thinkingBlockCount &&
       !hasUsageExtras &&
-      !latestModel
-    )
+      !state.latestModel
+    ) {
       return null;
+    }
 
     const serializedExtras = hasUsageExtras
       ? {
-          service_tiers: [...usageExtras.service_tiers],
-          speeds: [...usageExtras.speeds],
-          inference_geos: [...usageExtras.inference_geos],
+          service_tiers: [...state.usageExtras.service_tiers],
+          speeds: [...state.usageExtras.speeds],
+          inference_geos: [...state.usageExtras.inference_geos],
         }
       : null;
 
     return {
-      tokensByModel: hasTokens ? tokensByModel : null,
-      compaction,
-      errors: hasErrors ? errors : null,
-      turnDurations: hasTurnDurations ? turnDurations : null,
-      thinkingBlockCount,
+      tokensByModel: hasTokens ? state.tokensByModel : null,
+      compaction: state.compaction,
+      errors: hasErrors ? state.errors : null,
+      turnDurations: hasTurnDurations ? state.turnDurations : null,
+      thinkingBlockCount: state.thinkingBlockCount,
       usageExtras: serializedExtras,
-      latestModel,
+      latestModel: state.latestModel,
     };
+  }
+
+  /**
+   * Parse an in-memory JSONL string. Retained for callers that already have
+   * the content as a string. Internal extraction paths now use _streamRange
+   * directly to avoid the V8 string-length limit on multi-hundred-MiB files.
+   */
+  _parseContent(content) {
+    const state = this._initParseState();
+    let start = 0;
+    for (let i = 0; i < content.length; i++) {
+      if (content.charCodeAt(i) !== 10) continue;
+      let line = content.slice(start, i);
+      if (line.length && line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1);
+      if (line) this._consumeLine(line, state);
+      start = i + 1;
+    }
+    if (start < content.length) {
+      let line = content.slice(start);
+      if (line.length && line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1);
+      if (line) this._consumeLine(line, state);
+    }
+    return this._finalizeState(state);
   }
 
   _merge(cached, incremental) {

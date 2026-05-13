@@ -805,47 +805,64 @@ function importSession(dbModule, session) {
     const importedData = JSON.stringify({ imported: true });
     let backfilled = false;
 
-    // Backfill Stop events if none exist
-    const stopCount = db
+    // Per-event-type "high water mark" — the newest timestamp already present
+    // in the DB for each event_type belonging to this session. JSONL is
+    // append-only and parsed in file order, so any JSONL entry whose timestamp
+    // is strictly greater than this cutoff is unambiguously new and safe to
+    // insert. This replaces the old "if zero of type X then dump all" check
+    // that prevented growing sessions from ever picking up new events after
+    // the very first import — the root cause of "today shows 0 activity" when
+    // a session has been continuously appended to across multiple days.
+    const cutoffRows = db
       .prepare(
-        "SELECT COUNT(*) as c FROM events WHERE session_id = ? AND data LIKE '%imported%' AND event_type = 'Stop'"
+        "SELECT event_type, MAX(created_at) AS m FROM events WHERE session_id = ? GROUP BY event_type"
       )
-      .get(session.sessionId);
-    if (stopCount.c === 0) {
-      if (session.messageTimestamps && session.messageTimestamps.length > 0) {
-        for (const ts of session.messageTimestamps) {
-          insertEvent.run(
-            session.sessionId,
-            mainAgentId,
-            "Stop",
-            null,
-            `${session.name} — response`,
-            importedData,
-            ts
-          );
-        }
-      } else {
+      .all(session.sessionId);
+    const cutoff = Object.create(null);
+    for (const r of cutoffRows) cutoff[r.event_type] = r.m;
+    const isNewer = (type, ts) => {
+      if (!ts) return false;
+      const c = cutoff[type];
+      return !c || ts > c;
+    };
+
+    // Stop events — one per assistant message timestamp newer than cutoff.
+    if (session.messageTimestamps && session.messageTimestamps.length > 0) {
+      let added = 0;
+      for (const ts of session.messageTimestamps) {
+        if (!isNewer("Stop", ts)) continue;
         insertEvent.run(
           session.sessionId,
           mainAgentId,
           "Stop",
           null,
-          `Session: ${session.name} (${session.userMessages} user / ${session.assistantMessages} assistant msgs)`,
+          `${session.name} — response`,
           importedData,
-          session.startedAt
+          ts
         );
+        added++;
       }
+      if (added > 0) backfilled = true;
+    } else if (!cutoff.Stop) {
+      // No timestamps in JSONL and nothing previously imported — emit a single
+      // sentinel Stop at session start so the dashboard still shows the session.
+      insertEvent.run(
+        session.sessionId,
+        mainAgentId,
+        "Stop",
+        null,
+        `Session: ${session.name} (${session.userMessages} user / ${session.assistantMessages} assistant msgs)`,
+        importedData,
+        session.startedAt
+      );
       backfilled = true;
     }
 
-    // Backfill tool use events if none exist
-    const toolCount = db
-      .prepare(
-        "SELECT COUNT(*) as c FROM events WHERE session_id = ? AND data LIKE '%imported%' AND tool_name IS NOT NULL"
-      )
-      .get(session.sessionId);
-    if (toolCount.c === 0 && session.toolUses && session.toolUses.length > 0) {
+    // Tool-use events — one PostToolUse per tool_use block newer than cutoff.
+    if (session.toolUses && session.toolUses.length > 0) {
+      let added = 0;
       for (const tu of session.toolUses) {
+        if (!isNewer("PostToolUse", tu.timestamp)) continue;
         insertEvent.run(
           session.sessionId,
           mainAgentId,
@@ -855,8 +872,9 @@ function importSession(dbModule, session) {
           importedData,
           tu.timestamp
         );
+        added++;
       }
-      backfilled = true;
+      if (added > 0) backfilled = true;
     }
 
     // Backfill compaction agents/events for existing sessions
@@ -894,14 +912,12 @@ function importSession(dbModule, session) {
       }
     }
 
-    // Backfill turn durations if missing
-    const turnCount = db
-      .prepare(
-        "SELECT COUNT(*) as c FROM events WHERE session_id = ? AND event_type = 'TurnDuration'"
-      )
-      .get(session.sessionId);
-    if (turnCount.c === 0 && session.turnDurations && session.turnDurations.length > 0) {
+    // Turn-duration events — one per JSONL entry newer than cutoff.
+    if (session.turnDurations && session.turnDurations.length > 0) {
+      let added = 0;
       for (const td of session.turnDurations) {
+        const ts = td.timestamp || session.startedAt;
+        if (!isNewer("TurnDuration", ts)) continue;
         insertEvent.run(
           session.sessionId,
           mainAgentId,
@@ -909,18 +925,19 @@ function importSession(dbModule, session) {
           null,
           `Turn completed in ${(td.durationMs / 1000).toFixed(1)}s`,
           JSON.stringify({ durationMs: td.durationMs, imported: true }),
-          td.timestamp || session.startedAt
+          ts
         );
+        added++;
       }
-      backfilled = true;
+      if (added > 0) backfilled = true;
     }
 
-    // Backfill tool result errors if missing
-    const toolErrCount = db
-      .prepare("SELECT COUNT(*) as c FROM events WHERE session_id = ? AND event_type = 'ToolError'")
-      .get(session.sessionId);
-    if (toolErrCount.c === 0 && session.toolResultErrors && session.toolResultErrors.length > 0) {
+    // Tool-result-error events — one per JSONL entry newer than cutoff.
+    if (session.toolResultErrors && session.toolResultErrors.length > 0) {
+      let added = 0;
       for (const tre of session.toolResultErrors) {
+        const ts = tre.timestamp || session.startedAt;
+        if (!isNewer("ToolError", ts)) continue;
         insertEvent.run(
           session.sessionId,
           mainAgentId,
@@ -928,23 +945,44 @@ function importSession(dbModule, session) {
           null,
           `Tool execution failed: ${tre.content.slice(0, 100)}`,
           JSON.stringify({ ...tre, imported: true }),
-          tre.timestamp || session.startedAt
+          ts
         );
+        added++;
       }
-      backfilled = true;
+      if (added > 0) backfilled = true;
     }
 
-    // Enrich session metadata with new fields
-    if (!meta.entrypoint && (session.entrypoint || session.turnDurations?.length > 0)) {
-      meta.entrypoint = session.entrypoint || null;
-      meta.permission_mode = session.permissionMode || null;
-      meta.thinking_blocks = session.thinkingBlockCount || 0;
-      meta.usage_extras = session.usageExtras || null;
-      meta.turn_count = session.turnDurations ? session.turnDurations.length : 0;
+    // Refresh sessions.ended_at and the message-count metadata so the dashboard
+    // shows the latest window when a long-running session is re-imported. We
+    // only move ended_at forward — never backward — and only when the JSONL's
+    // latest activity is genuinely past whatever the DB currently records.
+    const metaChanged =
+      meta.user_messages !== session.userMessages ||
+      meta.assistant_messages !== session.assistantMessages ||
+      (!meta.entrypoint && (session.entrypoint || session.turnDurations?.length > 0));
+    if (metaChanged) {
+      meta.user_messages = session.userMessages;
+      meta.assistant_messages = session.assistantMessages;
+      meta.entrypoint = meta.entrypoint || session.entrypoint || null;
+      meta.permission_mode = meta.permission_mode || session.permissionMode || null;
+      meta.thinking_blocks = Math.max(meta.thinking_blocks || 0, session.thinkingBlockCount || 0);
+      meta.usage_extras = session.usageExtras || meta.usage_extras || null;
+      meta.turn_count = session.turnDurations ? session.turnDurations.length : meta.turn_count || 0;
       meta.total_turn_duration_ms = session.turnDurations
         ? session.turnDurations.reduce((s, t) => s + t.durationMs, 0)
-        : 0;
+        : meta.total_turn_duration_ms || 0;
       stmts.updateSession.run(null, null, null, JSON.stringify(meta), session.sessionId);
+      backfilled = true;
+    }
+    if (
+      session.endedAt &&
+      (!existing.ended_at || session.endedAt > existing.ended_at) &&
+      existing.status !== "active"
+    ) {
+      db.prepare("UPDATE sessions SET ended_at = ? WHERE id = ?").run(
+        session.endedAt,
+        session.sessionId
+      );
       backfilled = true;
     }
 
