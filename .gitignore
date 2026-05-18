@@ -7,6 +7,9 @@ dist/
 build/
 client/dist/
 mcp/build/
+desktop/out/
+desktop/release/
+desktop/assets/icon.iconset/
 *.tsbuildinfo
 
 # Database and data
