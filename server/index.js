@@ -115,6 +115,41 @@ function startServer(app, port) {
   });
 }
 
+/**
+ * Start the background services the dashboard relies on once the HTTP server
+ * is listening: the upstream update scheduler, the Claude Code config watcher,
+ * and a one-time reconciliation of orphaned run rows.
+ *
+ * Exported so alternative hosts can bring up the same services the standalone
+ * `node server/index.js` path does. The desktop Electron shell `require()`s
+ * this module instead of running it as the main entry, so the
+ * `require.main === module` block below never executes for it.
+ */
+function startBackgroundServices() {
+  const { startUpdateScheduler } = require("./update-scheduler");
+  const { broadcast } = require("./websocket");
+  startUpdateScheduler({ broadcast });
+  try {
+    const { startCcWatcher } = require("./lib/cc-watcher");
+    startCcWatcher({ broadcast });
+  } catch (err) {
+    console.warn("cc-watcher failed to start:", err.message);
+  }
+  // Flip any dashboard_runs rows the previous process left flagged
+  // running/spawning — those handles died with the previous server, so
+  // there's no way to attach to them anymore. Marking them abandoned
+  // keeps the Run history honest and unblocks Resume on conversation rows.
+  try {
+    const { reconcileOrphans } = require("./lib/dashboard-runs");
+    const reconciled = reconcileOrphans();
+    if (reconciled > 0) {
+      console.log(`[runs] reconciled ${reconciled} orphan run(s) → abandoned`);
+    }
+  } catch (err) {
+    console.warn("dashboard-runs reconciliation failed:", err.message);
+  }
+}
+
 if (require.main === module) {
   const PORT = parseInt(process.env.DASHBOARD_PORT || "4820", 10);
   const app = createApp();
@@ -122,28 +157,7 @@ if (require.main === module) {
 
   startServer(app, PORT).then((server) => {
     httpServer = server;
-    const { startUpdateScheduler } = require("./update-scheduler");
-    const { broadcast } = require("./websocket");
-    startUpdateScheduler({ broadcast });
-    try {
-      const { startCcWatcher } = require("./lib/cc-watcher");
-      startCcWatcher({ broadcast });
-    } catch (err) {
-      console.warn("cc-watcher failed to start:", err.message);
-    }
-    // Flip any dashboard_runs rows the previous process left flagged
-    // running/spawning — those handles died with the previous server, so
-    // there's no way to attach to them anymore. Marking them abandoned
-    // keeps the Run history honest and unblocks Resume on conversation rows.
-    try {
-      const { reconcileOrphans } = require("./lib/dashboard-runs");
-      const reconciled = reconcileOrphans();
-      if (reconciled > 0) {
-        console.log(`[runs] reconciled ${reconciled} orphan run(s) → abandoned`);
-      }
-    } catch (err) {
-      console.warn("dashboard-runs reconciliation failed:", err.message);
-    }
+    startBackgroundServices();
   });
 
   // Graceful shutdown — close connections and DB cleanly
@@ -298,4 +312,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { createApp, startServer };
+module.exports = { createApp, startServer, startBackgroundServices };

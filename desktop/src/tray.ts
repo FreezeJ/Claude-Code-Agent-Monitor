@@ -41,10 +41,14 @@ export function createTray(actions: TrayActions): Tray {
   const tray = new Tray(image.isEmpty() ? nativeImage.createEmpty() : image);
   tray.setToolTip(APP_NAME);
 
-  const rebuildMenu = () => {
+  // Built fresh on each right-click so the port label and the "Open at Login"
+  // checkbox always reflect current state. We intentionally do NOT call
+  // `tray.setContextMenu` — on macOS that makes a left-click open the menu,
+  // which would collide with the left-click "toggle window" behavior below.
+  const buildMenu = (): Menu => {
     const port = actions.serverPort();
     const portLabel = port ? `Listening on :${port}` : "Server not running";
-    const menu = Menu.buildFromTemplate([
+    return Menu.buildFromTemplate([
       { label: APP_NAME, enabled: false },
       { label: portLabel, enabled: false },
       { type: "separator" },
@@ -58,10 +62,7 @@ export function createTray(actions: TrayActions): Tray {
         label: "Open at Login",
         type: "checkbox",
         checked: actions.isOpenAtLogin(),
-        click: () => {
-          actions.toggleOpenAtLogin();
-          rebuildMenu();
-        },
+        click: () => actions.toggleOpenAtLogin(),
       },
       { type: "separator" },
       {
@@ -70,10 +71,10 @@ export function createTray(actions: TrayActions): Tray {
       },
       { label: "Quit", role: "quit" },
     ]);
-    tray.setContextMenu(menu);
   };
 
+  // Left-click toggles the dashboard window; right-click opens the menu.
   tray.on("click", () => actions.toggleWindow());
-  rebuildMenu();
+  tray.on("right-click", () => tray.popUpContextMenu(buildMenu()));
   return tray;
 }

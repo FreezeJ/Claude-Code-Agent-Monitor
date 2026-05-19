@@ -90,21 +90,39 @@ jobs:
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────────
+  #  🔎 Detect changed paths                                       #
+  #   Drives the path-filtered desktop job below without relying   #
+  #   on a hard-coded branch name.                                 #
+  # ────────────────────────────────────────────────────────────────
+  changes:
+    name: "🔎 Detect changed paths"
+    runs-on: ubuntu-latest
+    outputs:
+      desktop: ${{ steps.filter.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            desktop:
+              - 'desktop/**'
+              - '.github/workflows/ci.yml'
+
+  # ────────────────────────────────────────────────────────────────
   #  🍎 macOS Desktop App (Electron DMG)                           #
-  #   Runs only when desktop/** changes (path-filtered), or on push #
-  #   to main/master. Produces a downloadable .dmg artifact for QA. #
+  #   Runs when desktop/** changes, when the PR carries the        #
+  #   'desktop' label, or on any push. Produces a downloadable     #
+  #   .dmg artifact for QA.                                        #
   # ────────────────────────────────────────────────────────────────
   desktop:
     name: "🍎 macOS Desktop (DMG)"
     runs-on: macos-latest
-    needs: build
-    # The `paths` filter doesn't work at job level, so we check at runtime.
-    # On pull_request, we look at the changed files; on push, we always run
-    # for default-branch builds so artifacts stay fresh.
+    needs: [build, changes]
     if: |
       github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && contains(toJSON(github.event.pull_request.labels.*.name), 'desktop')) ||
-      github.event.pull_request.head.ref == 'feat/macos-desktop-app'
+      needs.changes.outputs.desktop == 'true' ||
+      contains(toJSON(github.event.pull_request.labels.*.name), 'desktop')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -121,7 +139,7 @@ jobs:
           cd .. && npm run build
 
       - name: Install desktop dependencies
-        run: cd desktop && npm install
+        run: cd desktop && npm ci
 
       - name: Build desktop (tsc)
         run: cd desktop && npm run build

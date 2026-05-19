@@ -74,6 +74,65 @@ export interface ServerHandle {
   stop: () => Promise<void>;
 }
 
+interface ServerModule {
+  createApp: () => unknown;
+  startServer: (app: unknown, port: number) => Promise<http.Server>;
+  startBackgroundServices: () => void;
+}
+
+/**
+ * One-time bootstrap of the services that the standalone `node server/index.js`
+ * path runs from its `require.main === module` block — the update scheduler,
+ * the Claude Code config watcher, orphaned-run reconciliation, and Claude Code
+ * hook installation. The desktop shell `require()`s the server module, so that
+ * block never fires; without this the embedded server is a degraded copy.
+ *
+ * Guarded so a "Restart Server" does not double-register schedulers/watchers.
+ */
+let backgroundServicesStarted = false;
+function bootstrapOwnedServer(appRoot: string, serverModule: ServerModule): void {
+  if (backgroundServicesStarted) return;
+  backgroundServicesStarted = true;
+
+  try {
+    serverModule.startBackgroundServices();
+    log.info("background services started");
+  } catch (err) {
+    log.warn("startBackgroundServices failed", err);
+  }
+
+  // Auto-install Claude Code hooks so a DMG-only user gets events flowing
+  // without having to run `npm run install-hooks` from a checkout.
+  try {
+    const hooks = require(path.join(appRoot, "scripts", "install-hooks.js")) as {
+      installHooks: (silent?: boolean) => boolean;
+    };
+    hooks.installHooks(true);
+    log.info("Claude Code hooks ensured");
+  } catch (err) {
+    log.warn("hook auto-install failed", err);
+  }
+}
+
+/**
+ * Close the embedded SQLite handle so WAL is checkpointed cleanly. Call once on
+ * application quit — never between restarts, since `server/db.js` is a cached
+ * singleton and a closed handle would break a subsequent server start.
+ */
+export function closeEmbeddedDatabase(): void {
+  try {
+    const dbModule = require(path.join(resolveAppRoot(), "server", "db.js")) as {
+      db?: { open?: boolean; close: () => void };
+    };
+    if (dbModule.db && dbModule.db.open !== false) {
+      dbModule.db.close();
+      log.info("embedded database closed");
+    }
+  } catch (err) {
+    log.warn("failed to close embedded database", err);
+  }
+}
+
 /**
  * Resolve the directory that contains the bundled `server/` and `client/dist/`.
  * In the packaged DMG these live under `Resources/app/`. In `npm run dev` they
@@ -202,16 +261,17 @@ export async function startEmbeddedServer(): Promise<ServerHandle> {
   log.info("starting embedded server", { port, serverEntry, appRoot });
 
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const serverModule = require(serverEntry) as {
-    createApp: () => unknown;
-    startServer: (app: unknown, port: number) => Promise<http.Server>;
-  };
+  const serverModule = require(serverEntry) as ServerModule;
 
   const expressApp = serverModule.createApp();
   const httpServer = await serverModule.startServer(expressApp, port);
 
   await waitForHealthy(port);
   log.info("embedded server healthy", { port });
+
+  // Bring up the same background services the standalone server path runs.
+  // Skipped automatically on a "Restart Server" via the one-time guard.
+  bootstrapOwnedServer(appRoot, serverModule);
 
   return {
     url: `http://127.0.0.1:${port}`,

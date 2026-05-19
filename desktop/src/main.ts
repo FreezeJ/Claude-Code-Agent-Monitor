@@ -18,7 +18,7 @@ import { APP_NAME } from "./constants";
 import { isOpenAtLogin, launchedAtLogin, toggleOpenAtLogin } from "./login-item";
 import { log } from "./logger";
 import { focusOrCreateWindow, installApplicationMenu } from "./menu";
-import { startEmbeddedServer, type ServerHandle } from "./server-host";
+import { closeEmbeddedDatabase, startEmbeddedServer, type ServerHandle } from "./server-host";
 import { createTray } from "./tray";
 import { createDashboardWindow } from "./window";
 
@@ -179,6 +179,9 @@ function wireLifecycle(): void {
       } catch (err) {
         log.warn("server stop errored during quit", err);
       }
+      // Close the SQLite handle once, here — not in stop(), which also runs on
+      // "Restart Server" where the cached db module must stay usable.
+      closeEmbeddedDatabase();
       app.exit(0);
     }
   });
