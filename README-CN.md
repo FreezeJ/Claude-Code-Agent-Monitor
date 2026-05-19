@@ -1162,6 +1162,12 @@ flowchart LR
 
 Dashboard 现在还提供一个可选的**原生 macOS 应用**，将现有的服务端 + 客户端打包进一个 `.app`，安装一次即可长期使用。你在浏览器 `localhost:4820` 看到的全部内容都运行在这个窗口里，并在其上叠加了 macOS 原生的生命周期能力：菜单栏图标、应用菜单、「登录项」集成，以及一个能干净关闭服务器的「退出」按钮。
 
+<p align="center">
+  <img src="images/macos.png" alt="以原生 macOS 桌面应用运行的 Claude Code Monitor" width="100%">
+  <br>
+  <em>🍎 <strong>macOS 桌面应用</strong> —— 原生 <code>.app</code> 外壳:菜单栏(托盘)图标、登录项自启动、单实例锁。同一套 Dashboard,运行在真正的 macOS 窗口里。</em>
+</p>
+
 > **状态：** v1，仅限 macOS。Windows 与 Linux 构建作为后续工作跟踪 —— Electron 让它们实现起来并不难，但每个平台都需要各自的 QA。自动更新（auto-updater）同样不在 v1 范围内，当前的更新方式是重新下载最新的 DMG。
 
 `desktop/` 是与 `client/`、`server/`、`mcp/`、`vscode-extension/` 平级的同级工作区，使用 **Electron 35** 构建。它**以进程内方式嵌入现有的 Express 服务器**——直接 `require()` `server/index.js`，运行在与 Electron 主进程相同的 Node 运行时中，**没有子进程、没有 IPC**——并在 `BrowserWindow` 中渲染已构建好的 React 客户端。

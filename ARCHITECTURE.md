@@ -1779,7 +1779,7 @@ For the extension source code, refer to the [vscode-extension/](./vscode-extensi
 
 The `desktop/` workspace ships the dashboard as a native macOS application (`Claude Code Monitor.app`, distributed as a `.dmg`). It is an Electron shell that **embeds the existing Express server in-process** and renders the already-built React client in a `BrowserWindow`. The desktop app does not reimplement the dashboard -- it `require()`s `server/index.js` directly, in the same Node runtime as the Electron main process, and points a Chromium window at it.
 
-For the user-facing guide (download, install, Gatekeeper, tray menu, auto-start), see [`DESKTOP.md`](./DESKTOP.md). For the full contributor/architecture reference -- including build performance, code signing, notarization, and CI details -- see [`desktop/README.md`](./desktop/README.md).
+For the user-facing guide (download, install, Gatekeeper, tray menu, auto-start), see [DESKTOP.md](./DESKTOP.md). For the full contributor/architecture reference -- including build performance, code signing, notarization, and CI details -- see [desktop/README.md](./desktop/README.md).
 
 ### Workspace Position
 

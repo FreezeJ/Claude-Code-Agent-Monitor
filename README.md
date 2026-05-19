@@ -1252,6 +1252,12 @@ For detailed developer configuration, see the [.vscode](./.vscode) and [vscode-e
 
 The dashboard also ships as an optional **native macOS application** — a single `.app` (distributed as a `.dmg`) you install once and forget. It lives in the `desktop/` workspace, a sibling of `client/`, `server/`, `mcp/`, and `vscode-extension/`, and is built with **Electron 35**.
 
+<p align="center">
+  <img src="images/macos.png" alt="Claude Code Monitor running as a native macOS desktop app" width="100%">
+  <br>
+  <em>🍎 <strong>macOS Desktop App</strong> — native <code>.app</code> shell with a menu-bar (tray) icon, Open-at-Login, and a single-instance lock. The same dashboard, in a real macOS window.</em>
+</p>
+
 Everything you see in the browser at `localhost:4820` lives inside this window, with macOS-native lifecycle on top: a menu-bar (tray) icon, a native application menu, Login Items integration for auto-start, and a single quit button that cleanly shuts the server down.
 
 > [!NOTE]
