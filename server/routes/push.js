@@ -39,8 +39,12 @@ router.post("/send", async (req, res) => {
     return res.status(400).json({ error: { message: "Missing title or body" } });
   }
   try {
-    await sendPushToAll(db, title, body);
-    res.json({ ok: true });
+    // `result` tells the caller which surfaces actually fired:
+    //   { native: true|false, pushed: <count>, failed: <count> }
+    // so a silent "no subscribers, no Electron host" no-op stops looking like
+    // success on the client side.
+    const result = await sendPushToAll(db, title, body);
+    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ error: { message: err.message } });
   }

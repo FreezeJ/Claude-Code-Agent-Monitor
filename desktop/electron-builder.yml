@@ -1,0 +1,121 @@
+# electron-builder configuration for Claude Code Agent Monitor (macOS).
+#
+# Defaults to ad-hoc signing so the project can build distributable DMGs
+# without a paid Apple Developer account. When the following environment
+# variables are set in CI (typically as repository secrets), the same
+# config produces a Developer ID–signed and Apple-notarized DMG:
+#
+#   APPLE_ID                       Apple ID email
+#   APPLE_TEAM_ID                  Developer team identifier
+#   APPLE_APP_SPECIFIC_PASSWORD    App-specific password for notarytool
+#   CSC_LINK                       Base64-encoded .p12 cert (optional)
+#   CSC_KEY_PASSWORD               Password for the .p12 (optional)
+#
+# No code changes are required to enable notarization later.
+
+appId: com.hoangsonww.ccam.desktop
+productName: Claude Code Monitor
+copyright: Copyright (c) 2026 Son Nguyen. MIT License.
+
+directories:
+  output: release
+  buildResources: assets
+
+# We pre-build with tsc into out/, and we ship the existing server/ and
+# client/dist/ from the parent repo as extraResources. Keeping the bundle
+# small: no source maps, no parent node_modules tree.
+files:
+  - "out/**/*"
+  - "package.json"
+
+extraResources:
+  - from: "../server"
+    to: "app/server"
+    filter:
+      - "**/*"
+      - "!__tests__/**"
+      - "!**/*.test.js"
+  - from: "../client/dist"
+    to: "app/client/dist"
+    filter: ["**/*"]
+  - from: "../scripts"
+    to: "app/scripts"
+    filter:
+      - "**/*"
+      - "!**/*.test.js"
+  - from: "../package.json"
+    to: "app/package.json"
+  - from: "../node_modules"
+    to: "app/node_modules"
+    filter:
+      - "**/*"
+      - "!**/*.md"
+      - "!**/test/**"
+      - "!**/tests/**"
+      - "!**/*.d.ts"
+      # better-sqlite3 ships from desktop/node_modules (per-arch rebuilt by
+      # install-app-deps). The root copy is built for the system Node and
+      # would trip @electron/universal's identical-file detector.
+      - "!**/better-sqlite3/**"
+  # Tray icon PNGs need to live OUTSIDE the asar archive: `nativeImage` can't
+  # always read them from an asar path, and `files` here (out/**, package.json)
+  # would otherwise leave them out of the bundle entirely. Ship them as plain
+  # files at `Resources/assets/`; `trayImagePath()` reads them via
+  # `process.resourcesPath` in production.
+  - from: "assets"
+    to: "assets"
+    filter:
+      - "tray-icon-Template*.png"
+
+asar: true
+asarUnpack:
+  # better-sqlite3 native bindings cannot live inside asar.
+  - "**/node_modules/better-sqlite3/**"
+
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  # Ad-hoc signed by default: the `package` npm script sets
+  # CSC_IDENTITY_AUTO_DISCOVERY=false so a code-signing cert already in the
+  # contributor's keychain is never picked up (it would fail distribution
+  # signing). Real Developer ID signing activates only when CSC_LINK (an
+  # explicit .p12) is provided — that path is unaffected by the flag.
+  # No `arch:` here on purpose. Pinning the arch list in the config makes
+  # electron-builder build *every* listed architecture regardless of the CLI
+  # flag, so `electron-builder --mac --arm64` would still emit an x64 DMG too.
+  # With arch left unspecified, the `--arm64` / `--x64` / `--universal` flags
+  # the `dmg:*` npm scripts pass are what decide which single DMG is produced.
+  target:
+    - dmg
+  extendInfo:
+    LSUIElement: false
+    NSHighResolutionCapable: true
+    NSRequiresAquaSystemAppearance: false
+
+dmg:
+  artifactName: "ClaudeCodeMonitor-${version}-${arch}.dmg"
+  # The mounted-volume title carries the architecture so that, when a release/
+  # directory holds more than one DMG, the Finder windows are distinguishable
+  # and nobody drags an x64 build onto Apple Silicon (which triggers a Rosetta
+  # prompt). The arch label is NOT set here: the `${arch}` macro expands
+  # inconsistently inside `title` — it yields `-arm64` / an empty string rather
+  # than `arm64` / `x64`. The per-arch `dmg:*` scripts in package.json override
+  # `dmg.title` with an explicit, clean label instead.
+  title: "Claude Code Monitor"
+  icon: assets/icon.icns
+  contents:
+    - x: 130
+      y: 220
+      type: file
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+  window:
+    width: 540
+    height: 380
+
+# Notarization runs only when the Apple credentials are present.
+afterSign: scripts/notarize.js

@@ -51,6 +51,24 @@ A professional dashboard to track and visualize your Claude Code agent sessions,
 ![Make](https://img.shields.io/badge/Make-4.3-000000?style=flat-square&logo=make&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-pipelines-2088FF?style=flat-square&logo=githubactions&logoColor=white)
 ![VS Code](https://img.shields.io/badge/VS_Code-Extension-007ACC?style=flat-square&logo=vscodium&logoColor=white)
+![Electron](https://img.shields.io/badge/Electron-35-47848F?style=flat-square&logo=electron&logoColor=white)
+![electron-builder](https://img.shields.io/badge/electron--builder-25.1-2c2e3b?style=flat-square&logo=electron&logoColor=white)
+![macOS](https://img.shields.io/badge/macOS-Desktop_App-000000?style=flat-square&logo=apple&logoColor=white)
+![SMAppService](https://img.shields.io/badge/SMAppService-Login_Items-000000?style=flat-square&logo=apple&logoColor=white)
+![web-push](https://img.shields.io/badge/web--push-VAPID-3b82f6?style=flat-square&logo=javascript&logoColor=white)
+![ws](https://img.shields.io/badge/ws-WebSocket_server-010101?style=flat-square&logo=socketdotio&logoColor=white)
+![swagger-ui-express](https://img.shields.io/badge/swagger--ui--express-5.0-85EA2D?style=flat-square&logo=swagger&logoColor=white)
+![multer](https://img.shields.io/badge/multer-multipart_upload-FF6B6B?style=flat-square&logo=express&logoColor=white)
+![adm-zip](https://img.shields.io/badge/adm--zip-archive_extract-FBBF24?style=flat-square&logo=files&logoColor=white)
+![tar](https://img.shields.io/badge/tar-tgz_extract-A78BFA?style=flat-square&logo=gnu&logoColor=white)
+![cors](https://img.shields.io/badge/cors-Express_CORS-22d3ee?style=flat-square&logo=express&logoColor=white)
+![uuid](https://img.shields.io/badge/uuid-v4_ids-1e293b?style=flat-square&logo=uuid&logoColor=white)
+![concurrently](https://img.shields.io/badge/concurrently-process_orchestrator-94a3b8?style=flat-square&logo=npm&logoColor=white)
+![Claude CLI](https://img.shields.io/badge/Claude_CLI-spawned_via_Run-orange?style=flat-square&logo=anthropic&logoColor=white)
+![Prettier](https://img.shields.io/badge/Prettier-3.8-F7B93E?style=flat-square&logo=prettier&logoColor=white)
+![better-sqlite3 WAL](https://img.shields.io/badge/better--sqlite3-WAL_mode-003B57?style=flat-square&logo=sqlite&logoColor=white)
+![Universal DMG](https://img.shields.io/badge/Universal_DMG-arm64_%2B_x64-7c3aed?style=flat-square&logo=apple&logoColor=white)
+![Auto Release](https://img.shields.io/badge/CI-auto--release_to_GitHub-22c55e?style=flat-square&logo=githubactions&logoColor=white)
 ![MIT License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 > [!TIP]
@@ -76,6 +94,7 @@ A professional dashboard to track and visualize your Claude Code agent sessions,
 - [Update Notifier](#update-notifier)
 - [Connection Status Modal](#connection-status-modal)
 - [VS Code Extension](#vs-code-extension)
+- [macOS Desktop App](#macos-desktop-app)
 - [Data Storage](#data-storage)
 - [Statusline](#statusline)
 - [Server Architecture](#server-architecture)
@@ -263,6 +282,7 @@ The dashboard offers a comprehensive set of features to monitor and analyze your
 | **Run Claude**                     | Spawn `claude` subprocesses directly from the dashboard with a chat-style streaming UI. Two modes: **Conversation** (multi-turn — stdin stays open, follow-up turns are piped as stream-json envelopes) and **One-shot** (headless, single prompt → single response). Conversation mode also supports **resuming any existing session** via `claude --resume <id>` — pick from your full sessions history with a searchable picker. The unified active-runs / history modal also offers two zero-config jump buttons: **Resume** on any past conversation row spawns `claude --resume <id>` immediately and seeds the chat with the prior transcript so you land in the live view with full context (no need to retype a prompt — the spawn idles on stdin until you send a follow-up); **View** on any past one-shot row loads the captured transcript inline into the run viewer as read-only (no spawn — same panel, no Stop/follow-up controls). Active runs switcher in the header lets you leave a run in the background, start another, and re-attach later. Re-attach is durable: the client reconciles the spawner's in-memory envelope log (`?envelopes=1`) with the session's on-disk JSONL transcript and prefers whichever has more user/assistant messages, so navigating away from a resumed run and coming back keeps the full prior history visible (the spawner only sees post-spawn turns; the transcript file has prior + current). Model dropdown (Opus 4.7 / 1M / Sonnet 4.6 / Haiku 4.5 / custom), permission-mode picker with explicit `bypassPermissions` warning, **thinking-effort** field (low / medium / high — wired to `--effort`), cwd autocomplete pre-filled with the dashboard's own cwd plus recent session cwds. Real character-by-character streaming via `--include-partial-messages`, plus a client-side **typewriter smoothing layer** that drips each `text_delta` / `thinking_delta` through `requestAnimationFrame` so even short replies (where claude bundles the whole answer into one or two chunks) appear to type in. The merge code keeps the `_streaming` flag and the delta-accumulated `content` array intact when claude's canonical `assistant` envelope arrives mid-stream, so thinking blocks aren't dropped at completion. WebSocket dispatch wraps each envelope in `flushSync` so React 18's auto-batching doesn't collapse bursts of deltas into a single render. **TUI parity (Tier 1)**: a collapsible **limitations banner** that minimizes to a slim pill (never disappears) explaining what stream-json mode can and can't do vs. the terminal TUI; a **prompt editor with slash-command autocomplete** with tiered scoring (exact name → starts-with → word-boundary → contains → subsequence → description-contains) that lists user / project / plugin commands (executed client-side via template expansion before send) and surfaces built-in CLI commands like `/clear`, `/model`, `/config` with a "CLI only — won't run from here" badge; **`@`-file references** with debounced fuzzy-search across the run's cwd (skipping `node_modules`, `.git`, `dist`, `build`, etc.); a **live context-window / token meter** showing input + output + cache-read tokens and running cost, computed from `stream_event` and `result.usage` envelopes during live streaming and from finalized assistant `usage` blocks (input / output / cache-read / cache-creation) when seeded from a transcript on resume / view / re-attach, so the meter populates immediately instead of sitting at 0/200k. Progress bar goes indigo → amber → red at 80% / 95% of the model's context cap; a **status header** with the active model, effort, permission mode, cwd, session ID, envelope count, and elapsed time. Autocomplete dropdowns open upward so they don't collide with the cwd picker below. Live / Offline indicator next to the title. Same-origin guard on the route prevents browser drive-by spawning. Concurrency is effectively uncapped by default (sanity ceiling of 10000 to prevent fork-bomb footguns from a buggy client; the terminal TUI has no cap and neither do we). Set `RUN_MAX_CONCURRENT` if you want a real ceiling. Spawned sessions fire the same hooks any `claude` process does, so they show up automatically in Sessions / Analytics / Kanban / Workflows — and Sessions / SessionDetail surface a green **▶ Run** badge / banner that links back to the Run page for any session that's currently being driven from there |
 | **Claude Config Explorer**         | A 12-tab inspector at `/cc-config` for everything Claude Code knows about: skills, subagents, slash commands, output styles, plugins (with per-plugin contributions count + author/license/homepage from `plugin.json`), marketplaces (with plugin counts read from each `marketplace.json`), MCP servers, hooks (with `~/.claude/hooks/` script listing), settings (structured key-value view + raw JSON toggle, secret-key redaction), memory (`CLAUDE.md` files), keybindings (grouped by context with `<kbd>` chips), and statusline (config + script content). For low-risk text-file surfaces (skills / agents / commands / output styles / memory) the page supports **create / edit / delete with mandatory timestamped backups** atomically written outside the directories Claude Code scans, plus a Backups modal with auto-built `mv` restore commands. Plugins, MCP, hooks-in-settings, and `settings.json` files stay read-only with explainer banners + copy-able CLI commands so the user knows the exact command to run themselves. **Live updates**: a `cc-watcher` running on the server uses `fs.watch` on `~/.claude/` (recursive where the platform supports it) plus `~/.claude.json`, debounced at 500 ms, to broadcast a `cc_config_changed` WebSocket message whenever Claude Code config changes — either via dashboard mutations or external tools (CLI installing a plugin, manually editing `settings.json`, dropping a new skill). The page subscribes and refetches automatically; a Live / Offline pill next to the title shows WebSocket status |
 | **Progressive Web App (PWA)**      | Three independent PWAs — dashboard, landing page, and wiki — each with its own Web App Manifest and Service Worker. Install any of them to your home screen / dock for a standalone, chrome-less experience. The dashboard SW caches the app shell and static assets (cache-first), serves navigation network-first, and preserves the existing VAPID push-notification pipeline. The landing-page and wiki SWs precache their respective shells and lazy-cache images on first visit, enabling offline access after a single load. All manifests use SVG icons (`favicon.svg`) with `sizes="any"` for modern browsers, and include `apple-mobile-web-app-capable` + `apple-touch-icon` meta tags for iOS standalone mode |
+| **macOS Desktop App**              | Optional native macOS `.app` (shipped as a `.dmg`) built with Electron 35, living in the `desktop/` workspace alongside `client/`, `server/`, `mcp/`, and `vscode-extension/`. It embeds the existing Express server **in-process** (`require()`s `server/index.js` — no child process, no IPC) and renders the built React client in a `BrowserWindow`. Adds a native macOS title bar, a menu-bar (tray) icon whose single-click dropdown shows a **live status snapshot** (sessions, agents, events today) pulled from SQLite at click time, a native macOS application menu, auto-start at login via macOS Login Items (`SMAppService`), a **⌘Q confirmation dialog** (second press bypasses), window-close-hides-but-server-keeps-running (dock icon stays as a "still alive" indicator), a single-instance lock, and tray actions for **Open in Browser**, **Restart Server**, and **Show Logs**. Prefers port 4820 (falls back to 4821–4829 then a random high port), adopts a healthy dashboard already running on 4820 instead of double-binding, and **coexists with the web dashboard** — both `npm run dev` and the desktop app can run together with hooks fanning out to both. Notifications fire as native macOS toasts (Web Push doesn't work reliably inside Electron). On first owned-server boot it auto-installs Claude Code hooks and starts the background services, so a DMG-only user gets events flowing with zero manual setup. See [`DESKTOP.md`](./DESKTOP.md) and [`desktop/README.md`](./desktop/README.md) |
 
 ---
 
@@ -335,6 +355,20 @@ npm run seed
 ```
 
 Creates 8 sample sessions, 23 agents, and 106 events so you can explore the UI immediately.
+
+### Alternative: macOS Desktop App
+
+If you'd rather not keep a terminal open, install the optional **native macOS desktop app**. It embeds the server in-process, adds a menu-bar (tray) icon, and supports auto-start at login via native Login Items.
+
+The fastest path is to **download the pre-built DMG** — grab `ClaudeCodeMonitor-<version>-universal.dmg` from the [latest GitHub Release](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/releases/latest) (CI auto-publishes a `vX.Y.Z` whenever `package.json` is bumped on `master`), then drag **Claude Code Monitor.app** into `/Applications`. Per-commit fresh builds also live as the `ClaudeCodeMonitor-dmg` artifact on every green CI run. To build it yourself instead:
+
+```bash
+npm run desktop:install        # install Electron + electron-builder into desktop/
+npm run desktop:dmg:arm64      # fast single-arch DMG for your own Mac (Apple Silicon)
+open desktop/release/ClaudeCodeMonitor-*-arm64.dmg   # open the arch you built
+```
+
+Full coverage of the desktop app — download, install, tray/menu features, build commands, and signing — is in the [macOS Desktop App](#macos-desktop-app) section below. See also [`DESKTOP.md`](./DESKTOP.md) (user guide) and [`desktop/README.md`](./desktop/README.md) (architecture).
 
 ### Alternative: Docker / Podman
 
@@ -417,7 +451,7 @@ sequenceDiagram
 ### Hook Lifecycle
 
 1. **Claude Code** fires a hook on session start, tool use, turn end, subagent completion, and session exit
-2. **Hook Handler** (`scripts/hook-handler.js`) reads the JSON event from stdin and POSTs it to the API. Fails silently with a 5s timeout so it never blocks Claude Code
+2. **Hook Handler** (`scripts/hook-handler.js`) reads the JSON event from stdin, resolves every live dashboard via `~/.claude/.agent-dashboard.json` (or `CLAUDE_DASHBOARD_PORT` if set), and POSTs the same payload to each one in parallel. Fails silently with a 5 s safety-net timeout so it never blocks Claude Code, and per-target promises never reject so a single dead listener can't starve the others. Multiple dashboards running together (e.g. `npm run dev` + the macOS desktop app) all receive every event.
 3. **Server** processes the event inside a SQLite transaction:
    - Auto-creates sessions and main agents on first contact
    - Detects `Agent` tool calls to track subagent creation
@@ -556,6 +590,13 @@ For git clones, the server periodically `git fetch`es `origin` and compares your
 | `npm run mcp:typecheck` | Type-check MCP source without emitting build output        |
 | `npm run mcp:docker:build` | Build MCP container image with Docker (`agent-dashboard-mcp:local`) |
 | `npm run mcp:podman:build` | Build MCP container image with Podman (`localhost/agent-dashboard-mcp:local`) |
+| `npm run desktop:install` | Install Electron + electron-builder into the `desktop/` workspace (rebuilds `better-sqlite3` for Electron's ABI) |
+| `npm run desktop:dev`   | Build and launch the Electron desktop app for local iteration  |
+| `npm run desktop:build` | Compile the desktop TypeScript sources into `desktop/out/`      |
+| `npm run desktop:test`  | Run the desktop smoke test (spawn Electron, probe `/api/health`) |
+| `npm run desktop:dmg`   | Build the **universal** (x64 + arm64) macOS DMG — correct for release, **slow** |
+| `npm run desktop:dmg:arm64` | Build an Apple-Silicon-only DMG — **fast**, recommended for your own Mac |
+| `npm run desktop:dmg:x64` | Build an Intel-only DMG — **fast**                           |
 
 ---
 
@@ -1223,6 +1264,134 @@ For detailed developer configuration, see the [.vscode](./.vscode) and [vscode-e
 
 ---
 
+## macOS Desktop App
+
+The dashboard also ships as an optional **native macOS application** — a single `.app` (distributed as a `.dmg`) you install once and forget. It lives in the `desktop/` workspace, a sibling of `client/`, `server/`, `mcp/`, and `vscode-extension/`, and is built with **Electron 35**.
+
+<p align="center">
+  <img src="images/macos.png" alt="Claude Code Monitor running as a native macOS desktop app" width="100%">
+  <br>
+  <em>🍎 <strong>macOS Desktop App</strong> — native <code>.app</code> shell with a menu-bar (tray) icon, Open-at-Login, and a single-instance lock. The same dashboard, in a real macOS window.</em>
+</p>
+
+Everything you see in the browser at `localhost:4820` lives inside this window, with macOS-native lifecycle on top: a menu-bar (tray) icon, a native application menu, Login Items integration for auto-start, and a single quit button that cleanly shuts the server down.
+
+> [!NOTE]
+> The desktop app is **macOS only** for now. Windows/Linux builds and an in-app auto-updater are tracked as follow-ups — Electron makes them straightforward, but each needs its own QA. The current upgrade path is to re-download the latest DMG; your data is stored outside the `.app` bundle, so it persists across reinstalls and updates.
+
+### How it works
+
+Unlike running the dashboard from a terminal, the desktop app needs no `npm start`, no open shell, and no second copy of the server. The Electron **main process** hosts the Express server **in-process** — it `require()`s `server/index.js` directly in the same Node runtime, with **no child process and no IPC** — and points a Chromium `BrowserWindow` at the built React client.
+
+```mermaid
+flowchart LR
+    subgraph electron["Claude Code Monitor.app — one Electron process"]
+        main["Electron Main Process<br/>Node 22 / Electron 35"]
+        host["server-host.ts<br/>port discovery · adoption · ABI patch"]
+        express["server/index.js<br/>Express API · SQLite · WebSocket"]
+        win["BrowserWindow<br/>built React client (client/dist)"]
+        tray["tray.ts + menu.ts<br/>menu-bar icon · native app menu"]
+        login["login-item.ts<br/>auto-start via SMAppService"]
+        main -->|"startEmbeddedServer()"| host
+        host -->|"require() in-process — no child process, no IPC"| express
+        main --> tray
+        main --> login
+        express -->|"http + ws on 127.0.0.1:&lt;port&gt;"| win
+    end
+
+    hooks["Claude Code hooks<br/>(separate node processes)"] -->|"POST /api/hooks/event"| express
+    sqlite[("data/dashboard.db<br/>SQLite — closed cleanly on quit")] <--> express
+
+    style main fill:#47848F,stroke:#2f5a62,color:#fff
+    style express fill:#339933,stroke:#5cb85c,color:#fff
+    style win fill:#61DAFB,stroke:#3aa9c9,color:#000
+    style host fill:#1f6feb,stroke:#1158c7,color:#fff
+```
+
+On launch the app:
+
+1. Picks a free port — preferring **4820**, falling back to **4821–4829**, then a random high port if all of those are taken.
+2. If a healthy dashboard server already answers `/api/health` on `4820` (e.g. you ran `npm start` in a terminal), it **adopts that server** instead of double-binding — no port collision, no SQLite contention. An adopted server keeps running after you quit the app.
+3. Otherwise it boots the embedded server, and on **first owned-server boot** auto-installs the Claude Code hooks and starts the background services (update scheduler, `cc-watcher`, orphaned-run reconciliation). A DMG-only user therefore gets events flowing with **zero manual setup** — no checkout, no `npm run install-hooks`.
+4. Recovers your **login-shell `PATH`** so the **Run Claude** feature can find and spawn the `claude` CLI — a Finder/Dock-launched app otherwise inherits only launchd's minimal `PATH` and would miss CLIs in `~/.local/bin`, `/opt/homebrew/bin`, version-manager bins, etc.
+5. Opens the dashboard window (unless macOS launched the app at login, in which case it stays tray-only).
+6. On quit, shuts the embedded server down gracefully and **closes SQLite cleanly** (WAL checkpoint).
+
+### Features
+
+- **Menu-bar (tray) icon** — always-on status surface. Left-click toggles the dashboard window; right-click opens a context menu with **Open Dashboard**, **Open in Browser**, **Restart Server**, **Show Logs**, **Open at Login** (toggle), and **Quit**.
+- **Native macOS application menu** — standard `About` / `File` / `Edit` / `View` / `Window` / `Help` menu with `⌘` shortcuts.
+- **Auto-start at login** — toggle **Open at Login** from the tray or app menu. It registers through macOS's modern `SMAppService` API, so the entry appears under **System Settings → General → Login Items** where users expect it.
+- **Window-close hides, server keeps running** — closing the window just hides it; the server and tray stay up. Click the tray to bring the window back.
+- **Single-instance lock** — double-launching simply focuses the existing window; no second server, no port collision.
+- **Data survives reinstalls and updates** — the SQLite database and VAPID keys live in `~/Library/Application Support/Claude Code Monitor/data/`, **outside the `.app` bundle**. Because a packaged, code-signed, or app-translocated bundle is read-only, writing the database there would break History Import and event persistence — keeping it in Application Support fixes that and means your imported history is untouched when you replace or upgrade the app.
+- **`claude` CLI on PATH** — the app recovers your login-shell `PATH` at startup, so the **Run Claude** feature works even though a Finder/Dock-launched app would otherwise only inherit launchd's minimal `PATH`.
+- **Logs** — the main process writes to `~/Library/Logs/Claude Code Monitor/desktop.log`; reach it from the tray menu's **Show Logs**.
+
+### Get it
+
+**Option A — download the pre-built DMG (recommended).** Two flavours:
+
+- **[Releases → latest](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/releases/latest)** — public, no GitHub sign-in. CI auto-publishes a new `vX.Y.Z` release whenever the version in `package.json` is bumped on `master`, so this link always serves the current build.
+- **Per-commit CI artifact** — every green run of the `🍎 macOS Desktop (DMG)` job uploads `ClaudeCodeMonitor-dmg` (sign-in required, 14-day retention) — useful for testing master before the next release tag.
+
+**Option B — build it yourself.** From the repo root:
+
+```bash
+npm run setup                # install root + client deps, build client, install hooks
+npm run build                # build the React client (client/dist)
+npm run desktop:install      # install Electron + electron-builder into desktop/
+npm run desktop:dmg:arm64    # fast single-arch DMG → desktop/release/ClaudeCodeMonitor-<ver>-arm64.dmg
+```
+
+> [!WARNING]
+> The universal `npm run desktop:dmg` build is intentionally **slow** — it builds the app **twice** (once per architecture), merges both with `@electron/universal`, and signs every binary, which means gigabytes of disk I/O. For building for **your own Mac**, use the single-arch `npm run desktop:dmg:arm64` (Apple Silicon) or `npm run desktop:dmg:x64` (Intel) — they finish in roughly a minute. Reserve the universal build for release artifacts; CI already produces one as the `ClaudeCodeMonitor-dmg` artifact.
+
+### Install it
+
+1. Double-click the `.dmg` to mount it.
+2. Drag **Claude Code Monitor.app** into your `/Applications` folder.
+3. The DMG is **ad-hoc signed** by default, so macOS Gatekeeper warns on first launch (*"Apple could not verify…"*). Clear the quarantine attribute:
+
+   ```bash
+   xattr -cr "/Applications/Claude Code Monitor.app"
+   ```
+
+   Or open **System Settings → Privacy & Security** and click **Open Anyway**.
+
+4. Launch the app. The tray icon appears and the dashboard window opens.
+
+### Build commands
+
+All commands run from the **repo root**:
+
+| Command                     | What it does                                                                 |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `npm run desktop:install`   | Install Electron + electron-builder into `desktop/`; rebuild `better-sqlite3` for Electron's ABI |
+| `npm run desktop:build`     | Compile the desktop TypeScript sources into `desktop/out/`                    |
+| `npm run desktop:dev`       | Build and launch the Electron app for local iteration                         |
+| `npm run desktop:test`      | Run the smoke test (spawn Electron, probe `/api/health`, shut down)            |
+| `npm run desktop:dmg`       | Build the **universal** (x64 + arm64) DMG — correct for release, **slow**      |
+| `npm run desktop:dmg:arm64` | Build an Apple-Silicon-only DMG — **fast** (~1 min), recommended for your own Mac |
+| `npm run desktop:dmg:x64`   | Build an Intel-only DMG — **fast** (~1 min)                                    |
+
+The resulting DMG is **~80 MB** (≈ 250 MB on disk once installed) — the standard Electron bundle tax.
+
+### Signing & notarization
+
+The DMG is **ad-hoc signed** by default so anyone can build a working `.app` without a paid Apple Developer account — the `package` script sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so a code-signing certificate already in the contributor's keychain is never auto-picked. Real **Developer ID signing** is opt-in via `CSC_LINK` (a base64-encoded `.p12`) and `CSC_KEY_PASSWORD`; **Apple notarization** is opt-in via `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD`. CI picks all of these up automatically when provided — no code change required.
+
+### Implementation notes
+
+- **`better-sqlite3`** is the only native module in the dependency tree, and a native module must be compiled against the exact Node ABI it runs on. The `desktop/` workspace ships its **own copy** of `better-sqlite3` rebuilt for Electron's ABI and uses a process-local `require` redirect to point `server/db.js` at it; the repo-root copy stays built for system Node (so `npm run test:server` keeps working).
+- **Building a DMG rebuilds `better-sqlite3` for the target architecture**, which can leave the desktop copy built for the other CPU arch and break `npm run desktop:dev` / `npm run desktop:test` with `ERR_DLOPEN_FAILED`. The desktop `prebuild` step now **auto-heals** the native module for the local machine on the next build, so the dev and smoke-test flows keep working after an arch-specific DMG build.
+- The **only change outside `desktop/`** is a behavior-preserving refactor of `server/index.js`: its post-listen bootstrap (update scheduler, `cc-watcher`, orphaned-run reconciliation) was extracted into an exported `startBackgroundServices()` so the embedded server runs exactly what `node server/index.js` runs. The standalone `node server/index.js` path is functionally unchanged; `client/`, `scripts/`, `mcp/`, and `vscode-extension/` are untouched.
+- A path-filtered **`🍎 macOS Desktop (DMG)`** CI job on `macos-latest` builds, smoke-tests, and packages the universal DMG, then uploads it as the `ClaudeCodeMonitor-dmg` artifact.
+
+For the full user guide (download, install, Gatekeeper, tray menu, auto-start) see [`DESKTOP.md`](./DESKTOP.md); for the contributor / architecture reference (process model, boot lifecycle, port discovery, build pipeline — with Mermaid diagrams) see [`desktop/README.md`](./desktop/README.md).
+
+---
+
 ## Data Storage
 
 - **Engine:** SQLite 3 via `better-sqlite3` (optional) or Node.js built-in `node:sqlite`
@@ -1490,6 +1659,29 @@ graph LR
     style M_REPL fill:#0f766e,stroke:#14b8a6,color:#fff
 ```
 
+Optional **macOS desktop app** — a single Electron process that hosts the Express server in-process (no terminal, no child process):
+
+```mermaid
+flowchart LR
+    subgraph desktop["macOS Desktop App — 1 Electron process"]
+        E_MAIN["Electron Main Process<br/>(Node 22 / Electron 35)"]
+        E_HOST["server-host.ts<br/>require() server/index.js"]
+        E_SRV["Embedded Express :4820<br/>API · SQLite · WebSocket"]
+        E_WIN["BrowserWindow<br/>built React client"]
+        E_TRAY["Menu-bar (tray) icon<br/>+ native app menu"]
+        E_MAIN --> E_HOST
+        E_HOST -->|"in-process require()"| E_SRV
+        E_MAIN --> E_TRAY
+        E_SRV -->|"http + ws on 127.0.0.1"| E_WIN
+    end
+
+    E_HOOKS["Claude Code hooks"] -->|"POST /api/hooks/event"| E_SRV
+
+    style E_MAIN fill:#47848F,stroke:#2f5a62,color:#fff
+    style E_SRV fill:#339933,stroke:#5cb85c,color:#fff
+    style E_WIN fill:#61DAFB,stroke:#3aa9c9,color:#000
+```
+
 ### Cloud Deployment
 
 The `deployments/` directory provides cloud-agnostic, enterprise-grade infrastructure for deploying the dashboard to production. Supports Helm, Kustomize, and Terraform across AWS, GCP, Azure, and OCI with blue-green, canary, and rolling release strategies.
@@ -1670,6 +1862,28 @@ agent-dashboard/
 |   |   |-- ui/                  # ANSI banner, colors, formatter, tables
 |   |   +-- types/               # Shared MCP type definitions
 |   +-- build/                   # Built MCP runtime output
+|-- desktop/
+|   |-- package.json             # Electron + electron-builder dependencies and scripts
+|   |-- electron-builder.yml     # DMG packaging config; signing/notarization hooks
+|   |-- tsconfig.json            # Strict TypeScript (src/ -> out/)
+|   |-- README.md                # Desktop app architecture reference (contributor docs)
+|   |-- assets/                  # icon.svg + generated icon.icns + tray PNGs
+|   |-- src/
+|   |   |-- main.ts              # Electron main process entry — lifecycle, wiring
+|   |   |-- server-host.ts       # In-process Express boot, port discovery, adoption, DB close
+|   |   |-- window.ts            # BrowserWindow + persisted window geometry
+|   |   |-- tray.ts              # Menu-bar (tray) icon + context menu
+|   |   |-- menu.ts              # Native macOS application menu
+|   |   |-- login-item.ts        # macOS Login Items auto-start toggle (SMAppService)
+|   |   |-- logger.ts            # File logger -> ~/Library/Logs/Claude Code Monitor/desktop.log
+|   |   |-- constants.ts         # App name, ports, timeouts, window size
+|   |   +-- preload.ts           # Intentionally empty (zero renderer privilege)
+|   |-- scripts/
+|   |   |-- prebuild.js          # Ensures root + client are built before tsc
+|   |   |-- build-icons.sh       # SVG -> PNG/ICNS via qlmanage/sips/iconutil
+|   |   +-- notarize.js          # electron-builder afterSign hook (opt-in notarization)
+|   +-- tests/
+|       +-- smoke.test.mjs       # Spawn Electron + probe /api/health
 |-- deployments/
 |   |-- README.md                # Deployment infrastructure reference
 |   |-- terraform/               # Cloud provisioning (AWS, GCP, Azure, OCI)

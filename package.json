@@ -1,6 +1,6 @@
 {
   "name": "agent-dashboard",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Real-time dashboard for tracking Claude Code agent activity",
   "private": true,
   "type": "commonjs",
@@ -49,7 +49,8 @@
     "developer-tools"
   ],
   "scripts": {
-    "dev": "concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "node scripts/dev.js",
+    "dev:raw": "concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "node --watch server/index.js",
     "dev:client": "cd client && npm run dev",
     "build": "cd client && npm run build",
@@ -67,6 +68,13 @@
     "mcp:typecheck": "npm --prefix mcp run typecheck",
     "mcp:docker:build": "docker build -f mcp/Dockerfile -t agent-dashboard-mcp:local .",
     "mcp:podman:build": "podman build -f mcp/Dockerfile -t localhost/agent-dashboard-mcp:local .",
+    "desktop:install": "cd desktop && npm install",
+    "desktop:dev": "npm run build && cd desktop && npm run dev",
+    "desktop:build": "cd desktop && npm run build",
+    "desktop:dmg": "npm run build && cd desktop && npm run dmg",
+    "desktop:dmg:arm64": "npm run build && cd desktop && npm run dmg:arm64",
+    "desktop:dmg:x64": "npm run build && cd desktop && npm run dmg:x64",
+    "desktop:test": "cd desktop && npm test",
     "install-hooks": "node scripts/install-hooks.js",
     "seed": "node scripts/seed.js",
     "import-history": "node scripts/import-history.js",

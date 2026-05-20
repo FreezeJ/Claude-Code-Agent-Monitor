@@ -101,14 +101,20 @@ Container-specific behavior:
 | `MCP_HTTP_PORT` | `8819` | Port for the MCP HTTP+SSE server (only when `MCP_TRANSPORT=http`) |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Bind address for the MCP HTTP server |
 
-Example with custom port:
+Example with a custom port:
 
 ```bash
 DASHBOARD_PORT=9000 npm run dev
 ```
 
-> [!IMPORTANT]
-> If you change the dashboard port, update `client/vite.config.ts` so the dev client proxies to the same port. Claude Code hooks reach the server through `CLAUDE_DASHBOARD_PORT`, so start Claude Code with that environment variable set to the new port, or change the default in `scripts/hook-handler.js`.
+> [!NOTE]
+> You usually do **not** need to set `DASHBOARD_PORT` manually. `npm run dev` is wrapped by `scripts/dev.js`, which probes both `127.0.0.1` and `::1` (so an SSH `LocalForward` bound to one loopback can't slip past) and picks the first free port in `4820–4859` automatically. The chosen port is propagated to the Vite dev proxy via `DASHBOARD_PORT`, and the Express server writes it to `~/.claude/.agent-dashboard.json` so the Claude Code hook handler discovers it without any env var.
+>
+> Multiple dashboards can run side by side — for example `npm run dev` and the macOS desktop app at the same time. Each one appends its `{port, pid, startedAt}` entry to the discovery file, and `scripts/hook-handler.js` fan-outs every hook event to every live entry, so both UIs keep their real-time stream.
+>
+> Setting `CLAUDE_DASHBOARD_PORT=N` overrides discovery entirely and forces the hook handler to a single port — useful for tests and container setups where the in-process discovery file isn't reachable from the host.
+>
+> If you bypass the picker (e.g. `npm run dev:raw`, container builds, or anything else that calls `node server/index.js` directly), make sure your client is built / proxied against the port the server actually bound.
 
 ### MCP server (optional)
 
@@ -202,6 +208,56 @@ The dashboard, landing page, and wiki each ship as independent Progressive Web A
 **Browser support:** PWA install prompts appear in Chrome 107+, Edge 107+, and Firefox 110+ (desktop and Android). Safari supports `apple-mobile-web-app-capable` for iOS home-screen mode but does not show an install banner.
 
 **Verifying PWA status:** Open DevTools → Application → Manifest to confirm the manifest loads. Check the Service Workers section to verify the SW is registered and active. The Lighthouse PWA audit should pass all core checks.
+
+### Desktop App Setup
+
+The `desktop/` workspace ships the dashboard as a native macOS `.app` (distributed as a `.dmg`) built with Electron 35. It is an Electron shell that **embeds the existing Express server in-process** — it does not reimplement anything. For installation (download a pre-built DMG from the [latest GitHub Release](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/releases/latest) or the per-commit `ClaudeCodeMonitor-dmg` CI artifact, or build one locally, then mount, drag, Gatekeeper bypass), see [INSTALL.md → macOS Desktop App](./INSTALL.md#macos-desktop-app-optional). The full user guide is [`DESKTOP.md`](./DESKTOP.md); the contributor / architecture reference is [`desktop/README.md`](./desktop/README.md).
+
+This section covers the parts of running the desktop app that matter for setup.
+
+**Building and running.** All commands run from the repo root:
+
+| Script | Command | Description |
+|---|---|---|
+| `desktop:install` | `npm run desktop:install` | Install Electron + electron-builder into `desktop/`; rebuilds `better-sqlite3` for Electron's ABI (requires Xcode CLI tools) |
+| `desktop:build` | `npm run desktop:build` | Prebuild guard + `tsc` → `desktop/out/` |
+| `desktop:dev` | `npm run desktop:dev` | Build, then launch Electron against `out/main.js` |
+| `desktop:test` | `npm run desktop:test` | Build, then run the smoke test (spawn Electron, probe `/api/health`) |
+| `desktop:dmg` | `npm run desktop:dmg` | **Universal** (x64 + arm64) DMG → `desktop/release/`. Correct for release. **Slow.** |
+| `desktop:dmg:arm64` | `npm run desktop:dmg:arm64` | Apple-Silicon-only DMG → `desktop/release/`. **Fast (~1 min).** |
+| `desktop:dmg:x64` | `npm run desktop:dmg:x64` | Intel-only DMG → `desktop/release/`. **Fast (~1 min).** |
+
+> [!NOTE]
+> Every `desktop:dmg*` script chains `npm run build` first. Running `electron-builder` bare skips the TypeScript compile and fails with `entry file out/main.js does not exist`. `npm run clean` inside `desktop/` deletes `out/` and `release/` — after a clean you must `npm run desktop:build` again before packaging.
+
+> [!TIP]
+> Building a DMG rebuilds the native `better-sqlite3` module for the **target** architecture, which can leave it built for the wrong CPU arch for your local machine. The desktop `prebuild` step auto-heals this — it rebuilds `better-sqlite3` for the local machine on the next `desktop:build` — so `npm run desktop:dev` and `npm run desktop:test` keep working after a cross-arch DMG build with no manual `npm run desktop:install` needed.
+
+**Hooks are auto-installed by the app.** On its first **owned-server** boot the desktop app writes the Claude Code hook configuration to `~/.claude/settings.json` itself, then starts the background services (update scheduler, `cc-watcher` config watcher, orphaned-run reconciliation) — the same `startBackgroundServices()` that `node server/index.js` runs. A DMG-only user therefore never needs `npm run install-hooks` from a checkout: just **start a new Claude Code session** after the app is running. (If the app *adopts* an existing server instead of starting its own, that server already did its own hook bootstrap — see port adoption below.)
+
+**Port-adoption behavior.** When the desktop app launches, its embedded server picks a port:
+
+1. It prefers **`4820`**.
+2. If a healthy dashboard server already answers `GET /api/health` on `4820` (for example you ran `npm start` in a terminal), the app **adopts that server** instead of double-binding — no SQLite contention. An adopted server is *not* owned by the app, so quitting the app leaves it running.
+3. Otherwise it falls back to `4821`–`4829`, then to a random high port (`49152`–`49500`).
+
+The chosen port is shown in the tray menu. The embedded server also honors the dashboard env vars in [Environment variables](#environment-variables) (`DASHBOARD_PORT` is set automatically by the desktop host).
+
+**Data directory.** The packaged app stores its SQLite database and VAPID keys in `~/Library/Application Support/Claude Code Monitor/data/` — **outside** the `.app` bundle. The desktop host sets `DASHBOARD_DATA_DIR` to this per-user location automatically. Keeping writable state out of the bundle means a packaged, code-signed (and therefore read-only) `.app` never tries to write inside itself, and your imported history and events **survive app reinstalls and updates**. (Older builds kept the database inside the bundle, which broke History Import; after upgrading from a pre-fix build, re-run **Settings → Import History → Rescan** once to close the one-time data gap.)
+
+**`claude` CLI resolution.** A Finder/Dock-launched macOS app inherits only launchd's minimal `PATH`, not your login-shell `PATH`. So the app can find and spawn the `claude` CLI for the "Run Claude" feature, the desktop host recovers your login-shell `PATH` at startup. If "Run Claude" still reports that `claude` is not on `PATH`, make sure `claude` is a real executable on your shell `PATH` — a shell alias or function cannot be spawned.
+
+**Auto-start at login.** Toggle *Open at Login* from the tray menu or the application menu. It registers via macOS's first-party `SMAppService` API (Electron's `app.setLoginItemSettings`), so the entry appears under  → *System Settings → General → Login Items*. When macOS launches the app at login, it starts **tray-only** — the dashboard window stays hidden until you click the tray icon.
+
+**Logs.** The Electron main process has no terminal when launched from Finder, so it writes to a per-user log file:
+
+```
+~/Library/Logs/Claude Code Monitor/desktop.log
+```
+
+Open it from the tray menu → **Show Logs**. Set `CCAM_DESKTOP_VERBOSE=1` to also mirror `info`/`warn` lines to stdout when running via `npm run desktop:dev`.
+
+**Lifecycle reminder.** Closing the dashboard window only **hides** it — the server and tray keep running. **Quit** (⌘Q or tray → *Quit*) shuts the embedded server down gracefully and exits. Double-launching just focuses the existing window (single-instance lock); it never starts a second server.
 
 ---
 
@@ -545,3 +601,42 @@ If the build fails in Stage 1 with `better-sqlite3` errors, this is expected and
 - Ensure you are using the latest Dockerfile (it should use `node:22-alpine` and **not** install `python3`, `make`, or `g++`)
 - Run `docker build --no-cache -t agent-monitor .` to force a clean rebuild
 - Check that `package.json` has `better-sqlite3` under `optionalDependencies`, not `dependencies`
+
+---
+
+### macOS desktop app — `npm run desktop:dmg` is extremely slow
+
+This is expected. The universal DMG build compiles and packages the app **twice** (once per architecture), then `@electron/universal` merges both trees and signs every binary — gigabytes of disk I/O. The silent `packaging arch=universal` step can sit for several minutes; it is not hung.
+
+For a build that targets your own Mac, use a single-arch command instead — it skips the merge and finishes in roughly a minute:
+
+```bash
+npm run desktop:dmg:arm64   # Apple Silicon
+npm run desktop:dmg:x64     # Intel
+```
+
+CI already produces the universal DMG — pulled either from the [latest GitHub Release](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/releases/latest) (CI auto-publishes a `vX.Y.Z` when `package.json` is bumped on `master`) or from the per-commit `ClaudeCodeMonitor-dmg` workflow artifact — so you rarely need to build it locally.
+
+---
+
+### macOS desktop app — `entry file out/main.js does not exist`
+
+You ran `electron-builder` without a TypeScript compile. `npm run clean` (in `desktop/`) deletes `out/`, and `electron-builder` only packages — it does not compile. Re-run `npm run desktop:build` first, or use a `desktop:dmg*` script (each one chains `npm run build` for you). Never invoke `electron-builder` bare.
+
+---
+
+### macOS desktop app — Gatekeeper blocks the app on first launch
+
+The DMG is **ad-hoc signed** by default (the project ships no paid Apple Developer ID), so macOS shows *"Apple could not verify…"* the first time you open the app. Strip the quarantine attribute:
+
+```bash
+xattr -cr "/Applications/Claude Code Monitor.app"
+```
+
+Or open  → *System Settings → Privacy & Security* and click *Open Anyway*. Real Developer ID signing and notarization are opt-in via the `CSC_LINK` / `CSC_KEY_PASSWORD` and `APPLE_ID` / `APPLE_TEAM_ID` / `APPLE_APP_SPECIFIC_PASSWORD` repository secrets — see [`DESKTOP.md`](./DESKTOP.md#notarization-for-the-maintainer).
+
+---
+
+### macOS desktop app — no sessions appearing
+
+The desktop app installs hooks on its **first owned-server boot**, not before. After the app is running, start a **new** Claude Code session and confirm `~/.claude/settings.json` contains entries referencing `hook-handler.js`. If the app adopted an existing server on `4820`, that server's own hook configuration applies instead. For a blank dashboard window, check `~/Library/Logs/Claude Code Monitor/desktop.log` (tray → *Show Logs*) and use tray → *Restart Server*.

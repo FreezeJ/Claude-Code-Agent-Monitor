@@ -77,6 +77,7 @@
 - [更新提醒](#更新提醒)
 - [连接状态弹窗](#连接状态弹窗)
 - [VS Code 扩展](#vs-code-扩展)
+- [macOS 桌面应用](#macos-桌面应用)
 - [数据存储](#数据存储)
 - [状态栏](#状态栏)
 - [服务端架构](#服务端架构)
@@ -339,6 +340,22 @@ npm run seed
 
 创建 8 个示例会话、23 个 Agent 和 106 个事件，让你可以立即浏览 UI。
 
+### 替代方案：macOS 桌面应用
+
+如果你不想一直开着终端窗口，可以构建可选的 **Electron 桌面应用**。它将 Express 服务器以进程内方式嵌入运行，提供菜单栏（托盘）图标，并支持通过原生「登录项」（Login Items）开机自启。
+
+```bash
+npm run desktop:install
+npm run desktop:dmg:arm64      # Apple Silicon 专用 — 快速（约 1 分钟）
+# 或：npm run desktop:dmg      # 通用版（x64 + arm64）— 用于发布，构建较慢
+open desktop/release/ClaudeCodeMonitor-*-arm64.dmg   # 打开你刚构建的架构对应的 DMG
+```
+
+> [!TIP]
+> 为自己的 Mac 构建时，请使用架构专用命令（`desktop:dmg:arm64` 或 `desktop:dmg:x64`），它们速度快得多。通用版 `desktop:dmg` 会把应用构建两次再合并，仅在制作发布产物时才需要。
+
+完整的生命周期语义、托盘/菜单功能、签名与公证钩子详见下文的 [macOS 桌面应用](#macos-桌面应用) 章节，以及 [`DESKTOP.md`](./DESKTOP.md)。
+
 ### 替代方案：Docker / Podman
 
 项目包含 `Dockerfile` 和 `docker-compose.yml`。同时支持 Docker 和 Podman。
@@ -549,6 +566,13 @@ flowchart LR
 | `npm run mcp:typecheck` | 类型检查 MCP 源码，不生成构建输出 |
 | `npm run mcp:docker:build` | 用 Docker 构建 MCP 容器镜像（`agent-dashboard-mcp:local`） |
 | `npm run mcp:podman:build` | 用 Podman 构建 MCP 容器镜像（`localhost/agent-dashboard-mcp:local`） |
+| `npm run desktop:install` | 安装 macOS 桌面应用（`desktop/`）的依赖，并为 Electron 的 ABI 重新编译 `better-sqlite3` |
+| `npm run desktop:build` | 预构建校验 + `tsc`，编译 Electron 主进程到 `desktop/out/` |
+| `npm run desktop:dev` | 构建后启动 Electron，加载本地桌面应用 |
+| `npm run desktop:test` | 运行桌面应用冒烟测试（启动 Electron 并探测 `/api/health`） |
+| `npm run desktop:dmg` | 构建**通用版** DMG（x64 + arm64）— 用于发布，**构建较慢** |
+| `npm run desktop:dmg:arm64` | 构建 Apple Silicon 专用 DMG — **快速** |
+| `npm run desktop:dmg:x64` | 构建 Intel 专用 DMG — **快速** |
 
 ---
 
@@ -1134,6 +1158,174 @@ flowchart LR
 
 ---
 
+## macOS 桌面应用
+
+Dashboard 现在还提供一个可选的**原生 macOS 应用**，将现有的服务端 + 客户端打包进一个 `.app`，安装一次即可长期使用。你在浏览器 `localhost:4820` 看到的全部内容都运行在这个窗口里，并在其上叠加了 macOS 原生的生命周期能力：菜单栏图标、应用菜单、「登录项」集成，以及一个能干净关闭服务器的「退出」按钮。
+
+<p align="center">
+  <img src="images/macos.png" alt="以原生 macOS 桌面应用运行的 Claude Code Monitor" width="100%">
+  <br>
+  <em>🍎 <strong>macOS 桌面应用</strong> —— 原生 <code>.app</code> 外壳:菜单栏(托盘)图标、登录项自启动、单实例锁。同一套 Dashboard,运行在真正的 macOS 窗口里。</em>
+</p>
+
+> **状态：** v1，仅限 macOS。Windows 与 Linux 构建作为后续工作跟踪 —— Electron 让它们实现起来并不难，但每个平台都需要各自的 QA。自动更新（auto-updater）同样不在 v1 范围内，当前的更新方式是重新下载最新的 DMG。
+
+`desktop/` 是与 `client/`、`server/`、`mcp/`、`vscode-extension/` 平级的同级工作区，使用 **Electron 35** 构建。它**以进程内方式嵌入现有的 Express 服务器**——直接 `require()` `server/index.js`，运行在与 Electron 主进程相同的 Node 运行时中，**没有子进程、没有 IPC**——并在 `BrowserWindow` 中渲染已构建好的 React 客户端。
+
+### 与 PWA 有何不同
+
+[`#144`](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/pull/144) 引入的 PWA 让 Dashboard 可以在 Chromium 系浏览器中安装，适合已经让服务器常驻运行的用户。桌面应用解决的是另一个正交问题：**无需终端窗口即可启动并保持服务器运行**。
+
+| 能力 | PWA | 桌面应用 |
+| ------------------------------- | --------------------------- | ------------------------ |
+| 安装到 Dock / 应用程序文件夹 | ✅ | ✅ |
+| 管理 Express 服务器 | ❌ —— 需用户单独 `npm start` | ✅ —— 进程内嵌入 |
+| 开机自启（macOS） | ❌ | ✅ —— 通过原生「登录项」 |
+| 菜单栏（托盘）图标常驻状态 | ❌ | ✅ |
+| 原生应用菜单（⌘ 快捷键等） | ❌ | ✅ |
+| 浏览器重启后仍存活 | ⚠️ 取决于浏览器 | ✅ |
+
+两者可以共存 —— 按你的工作流选择即可。
+
+### 它在仓库中的位置
+
+桌面应用本身**不改动任何其他工作区的运行时行为**。`desktop/` 之外唯一的改动是对 `server/index.js` 做了一次**保持行为不变的重构**：监听端口后的引导逻辑（更新调度器、Claude Code 配置监视器 `cc-watcher`、孤儿运行对账）被抽取为一个导出的 `startBackgroundServices()`，使嵌入式服务器与 `node server/index.js` 运行完全相同的逻辑。独立服务器的运行路径在功能上没有任何变化。
+
+```mermaid
+flowchart TD
+    subgraph repo["Claude-Code-Agent-Monitor (repo root)"]
+        server["server/<br/>Express API · SQLite · WebSocket"]
+        client["client/<br/>React + Vite SPA"]
+        scripts["scripts/<br/>hook installer/handler, import, seed"]
+        mcp["mcp/<br/>local MCP server"]
+        vscode["vscode-extension/"]
+        desktop["desktop/<br/>★ Electron shell"]
+    end
+
+    desktop -- "require() in-process" --> server
+    desktop -- "loads built SPA from" --> client
+    desktop -- "auto-installs hooks via" --> scripts
+    server -- "serves static" --> client
+
+    style desktop fill:#6366f1,stroke:#818cf8,color:#fff
+    style server fill:#10b981,stroke:#34d399,color:#fff
+```
+
+### 获取并安装
+
+**方式 A —— 下载预构建的 DMG（推荐）：**
+
+1. 打开 [**Releases → latest**](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/releases/latest) 并在资源中下载 `ClaudeCodeMonitor-<version>-universal.dmg`。每当 `master` 上的 `package.json` 版本号被提升时，CI 都会自动发布一个新的 `vX.Y.Z`，因此该链接始终指向当前版本（公开下载，无需登录 GitHub）。若需要 **每次提交的最新构建**，可改用每个绿色 CI 运行上传的 `ClaudeCodeMonitor-dmg` 工作流产物（需登录，保留 14 天）。
+2. 双击挂载 DMG，将 `Claude Code Monitor.app` 拖入 `应用程序`（Applications）文件夹。
+3. 打开它。首次启动时 macOS 可能会弹出 Gatekeeper 警告 —— 见下文 [Gatekeeper 首次启动](#gatekeeper-首次启动)。
+
+**方式 B —— 本地构建：**
+
+```bash
+# 在项目根目录，git clone 之后：
+npm run setup                # 安装根目录 + 客户端 + vscode-extension 依赖
+npm run build                # 构建 React 客户端
+npm run desktop:install      # 安装 Electron + electron-builder
+npm run desktop:dmg:arm64    # 为自己的 Mac 构建（Apple Silicon，快速）
+open desktop/release/ClaudeCodeMonitor-*-arm64.dmg   # 打开你刚构建的架构对应的 DMG
+```
+
+#### Gatekeeper 首次启动
+
+DMG 默认采用**临时签名（ad-hoc signing）**——在没有付费 Apple Developer ID 的情况下，这是项目能提供的最高级别。macOS 首次打开时会警告「Apple 无法验证…」。两种绕过方式：
+
+```bash
+# 最简单：在打开前去掉隔离属性。
+xattr -cr ~/Downloads/ClaudeCodeMonitor-*.dmg
+
+# 或者在拖入「应用程序」之后去掉应用的隔离属性：
+xattr -cr "/Applications/Claude Code Monitor.app"
+```
+
+也可以打开  → *系统设置 → 隐私与安全性*，滚动到被拦截的项目，点击*仍要打开*。
+
+### 启动后会发生什么
+
+1. Electron 主进程挑选一个空闲端口 —— 优先 **4820**，其次回退到 4821–4829，若都被占用则使用一个随机的高位端口。
+2. 如果端口 4820 上已有进程响应 `/api/health`（例如你已在终端运行 `npm start`），桌面应用会**直接采用（adopt）那个服务器**，不再启动第二个，避免重复绑定端口与 SQLite 争用。被采用的服务器不归应用所有 —— 退出应用时它仍会继续运行。
+3. 否则，应用直接 `require()` `server/index.js` 在进程内启动 —— 与主进程同一个 Node 运行时、同一块内存，启动通常在两秒以内。
+4. 在**首次由应用自有（owned）的服务器启动**时，应用会自动安装 Claude Code Hook（写入 `~/.claude/settings.json`），并启动后台服务（更新调度器、`cc-watcher` 配置监视器、孤儿运行对账）—— 这样**仅安装 DMG 的用户无需从代码检出运行 `npm run install-hooks` 即可让事件流转**。
+5. Dashboard 窗口打开（除非应用是在登录时被 macOS 启动的，此时它会保持仅托盘模式）。
+6. 菜单栏出现一个图标，菜单包含：*打开 Dashboard、在浏览器中打开、重启服务器、查看日志、开机自启（开关）、退出*。
+
+```mermaid
+flowchart TD
+    launch["App launch"] --> lock{"single-instance<br/>lock acquired?"}
+    lock -->|no| focus["focus existing window<br/>and exit(0)"]
+    lock -->|yes| probe{"healthy server<br/>already on :4820?"}
+    probe -->|yes| adopt["adopt it<br/>(ownedByUs = false)"]
+    probe -->|no| pick["pick free port<br/>4820 → 4821-4829 → random"]
+    pick --> boot["require() server/index.js<br/>in-process"]
+    boot --> bootstrap["auto-install hooks +<br/>startBackgroundServices()"]
+    adopt --> win
+    bootstrap --> win{"launched at login?"}
+    win -->|yes| tray["tray-only, dock hidden"]
+    win -->|no| show["open dashboard window"]
+
+    style adopt fill:#f59e0b,stroke:#d97706,color:#fff
+    style boot fill:#6366f1,stroke:#818cf8,color:#fff
+    style bootstrap fill:#10b981,stroke:#34d399,color:#fff
+```
+
+### 生命周期语义
+
+- **关闭窗口只是隐藏它。** 服务器继续运行，托盘图标保留。点击托盘即可重新调出窗口。
+- **退出（⌘Q，或托盘 → 退出）** 会优雅关闭嵌入式服务器、干净关闭 SQLite（完成 WAL checkpoint），然后退出。
+- **开机自启开关：** 在托盘菜单（或应用菜单）中切换*开机自启*。它通过 macOS 的 `SMAppService` / `ServiceManagement` 框架注册 —— 你会在  → *系统设置 → 通用 → 登录项* 中看到该条目。当 macOS 在登录时启动应用时，应用以**仅托盘模式**启动并隐藏 Dock 图标，不会有窗口突然弹到用户面前。
+- **单实例锁：** 重复启动只会聚焦已有窗口，不会产生第二个服务器，也不会发生端口冲突。
+- **「在浏览器中打开」「重启服务器」「查看日志」** 均可从托盘菜单直接触发。日志位于 `~/Library/Logs/Claude Code Monitor/desktop.log`（菜单中的*查看日志*会打开该文件夹）。
+- **你的数据**（SQLite 数据库与 VAPID 密钥）保存在 `~/Library/Application Support/Claude Code Monitor/data/` —— 位于 `.app` 包**之外**，因此能够**在应用重装与更新后继续保留**。早期的构建曾把数据库存放在 `.app` 包内部，而已安装、已签名（或经过 app-translocation）的包是只读的，这会导致「历史导入」（History Import）失败 —— 该问题现已修复。
+- **`claude` CLI** 通过你登录 Shell 的 `PATH` 解析，应用在启动时会恢复该 `PATH` —— 因此即便从 Finder/Dock 启动的 macOS 应用通常只会继承 launchd 提供的极简 `PATH`，「运行 Claude」（Run Claude）功能依然能找到并启动 `claude` CLI。
+
+### 构建命令
+
+所有命令都可从**仓库根目录**运行。每个负责打包的脚本都会先运行 `npm run build`，因此你无需手动调用 `electron-builder`。
+
+| 命令 | 作用 |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| `npm run desktop:install` | 安装 Electron、electron-builder、类型定义；并为 Electron 的 ABI 重新编译 `better-sqlite3` |
+| `npm run desktop:build` | 预构建校验 + `tsc`，编译主进程到 `desktop/out/` |
+| `npm run desktop:dev` | 构建后启动 Electron 加载本地应用 |
+| `npm run desktop:test` | 冒烟测试（启动 Electron 并探测 `/api/health`），同样在 CI 上运行 |
+| `npm run desktop:dmg` | 构建**通用版** DMG（x64 + arm64）。用于发布。**构建较慢。** |
+| `npm run desktop:dmg:arm64` | 构建 Apple Silicon 专用 DMG。**快速。** |
+| `npm run desktop:dmg:x64` | 构建 Intel 专用 DMG。**快速。** |
+
+> [!IMPORTANT]
+> **通用版构建有意设计得很慢。** `npm run desktop:dmg` 会把整个应用构建两次（一次 x64、一次 arm64），再用 `@electron/universal` 合并两份架构、对每个原生二进制做 `lipo` 处理并逐一签名 —— 这是标准的 Electron 打包开销叠加上通用合并的代价。
+>
+> - 为**自己的 Mac** 构建 → 使用 `desktop:dmg:arm64`（Apple Silicon）或 `desktop:dmg:x64`（Intel）。单架构、无合并，大约 1 分钟即可完成。
+> - 为**所有人构建发布产物** → 使用通用版 `desktop:dmg`，并预期它会耗时较久。CI 已经会构建通用版 DMG 并上传为 `ClaudeCodeMonitor-dmg` 产物，因此你很少需要在本地构建它。
+> - 无论哪种方式，产物体积都约为 **80 MB 的 DMG / 安装后约 250 MB**，这是标准的 Electron 体积成本。
+
+### 原生模块与签名
+
+- **`better-sqlite3`**：依赖树中唯一的原生模块。桌面工作区在 `postinstall` 中通过 `electron-builder install-app-deps` 为 Electron 的 ABI 重新编译一份桌面专用的 `better-sqlite3`，因此不会干扰仓库根目录为系统 Node 构建的那一份（`npm run test:server` 仍可用）。若重新编译失败，服务器会回退到 Node 内置的 `node:sqlite`，应用依然能启动。
+- **贡献者注意**：构建 DMG 会针对目标架构重新编译 `better-sqlite3`，可能让其不再匹配本机 CPU 架构。桌面应用的预构建（prebuild）步骤会自动为本机修复（auto-heal）这一情况，因此后续的 `desktop:dev` / `desktop:test` 无需手动处理。
+- **代码签名**：DMG 默认**临时签名**（`package` 脚本设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，确保不会误用钥匙串里已有的证书）。提供 `CSC_LINK`（base64 编码的 `.p12`）与 `CSC_KEY_PASSWORD` 时启用真正的 **Developer ID 签名**。
+- **公证（notarization）**：可选启用。当 `APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_SPECIFIC_PASSWORD` 三者都设置时，`desktop/scripts/notarize.js`（`electron-builder` 的 `afterSign` 钩子）会执行公证；否则它什么也不做。
+
+### 持续集成
+
+`.github/workflows/ci.yml` 中的 `🍎 macOS Desktop (DMG)` 作业运行在 `macos-latest` 上，并经过**路径过滤**：一个 `changes` 作业（`dorny/paths-filter`）检测 `desktop/**` 的改动；该桌面作业也会在任何 `push` 时、或 PR 带有 `desktop` 标签时运行。作业会执行 `npm ci`、`tsc` 构建、冒烟测试，构建**通用版 DMG**（对偶发的 `hdiutil detach` 失败会重试），并将结果上传为 `ClaudeCodeMonitor-dmg` 产物供工作流运行下载。
+
+### 桌面应用故障排查
+
+| 现象 | 原因 / 解决方法 |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 「运行 Claude」提示 `claude` 不在 PATH 上 | 从 Finder/Dock 启动的应用只会继承 launchd 的极简 `PATH`，而非你的 Shell `PATH`。已修复 —— 应用在启动时会恢复登录 Shell 的 `PATH`。若问题仍存在，请确认 `claude` 是真正的可执行文件（而非 Shell 别名或函数），并位于你的 Shell `PATH` 上 |
+| 更新应用后导入的历史 / 会话消失 | 早期构建把数据库存放在（可被替换的）`.app` 包内部。已修复 —— 数据现保存在 `~/Library/Application Support/Claude Code Monitor/data/`，可在重装与更新后保留。从修复前的旧版本升级后，请再执行一次 **Import History → Rescan** |
+| `desktop:dev` / `desktop:test` 报 `ERR_DLOPEN_FAILED` | 之前的 DMG 构建留下了为另一 CPU 架构编译的 `better-sqlite3`。预构建步骤会在下次构建时自动修复；如有需要可运行 `npm run desktop:install` |
+
+更多细节请参阅面向用户的 [`DESKTOP.md`](./DESKTOP.md)，以及面向贡献者 / 架构的 [`desktop/README.md`](./desktop/README.md)。
+
+---
+
 ## 数据存储
 
 - **引擎：** SQLite 3，通过 `better-sqlite3`（可选）或 Node.js 内置 `node:sqlite`
@@ -1597,6 +1789,19 @@ agent-dashboard/
 |   |-- rules/                   # Codex 执行策略规则
 |   |-- agents/                  # Codex 自定义 Agent 模板
 |   +-- skills/                  # Codex 项目技能
+|-- desktop/
+|   |-- README.md                # 桌面应用贡献者 / 架构参考
+|   |-- electron-builder.yml     # DMG 打包配置；签名 / 公证钩子
+|   |-- src/
+|   |   |-- main.ts              # 主进程入口 —— 生命周期、对话框、装配
+|   |   |-- server-host.ts       # 进程内 Express 启动、端口发现、服务器采用、SQLite 关闭
+|   |   |-- window.ts            # BrowserWindow + 持久化窗口几何状态
+|   |   |-- menu.ts              # 原生 macOS 应用菜单
+|   |   |-- tray.ts              # 菜单栏（托盘）图标 + 上下文菜单
+|   |   |-- login-item.ts        # macOS 登录项（SMAppService）开机自启
+|   |   +-- logger.ts            # 写入 desktop.log 的文件日志器
+|   |-- scripts/                 # prebuild 校验、build-icons、notarize 钩子
+|   +-- tests/smoke.test.mjs     # 启动 Electron 并探测 /api/health 的冒烟测试
 |-- statusline/
 |   |-- README.md                # 状态栏安装和使用指南
 |   |-- statusline.py            # 渲染状态栏的 Python 脚本

@@ -30,7 +30,12 @@ try {
 const path = require("path");
 const fs = require("fs");
 
-const DB_PATH = process.env.DASHBOARD_DB_PATH || path.join(__dirname, "..", "data", "dashboard.db");
+// Resolution order: explicit DASHBOARD_DB_PATH wins; otherwise the file lives
+// in DASHBOARD_DATA_DIR (set by hosts like the desktop app to keep writable
+// state outside a read-only bundle); otherwise the repo-local `data/` dir.
+const DB_PATH =
+  process.env.DASHBOARD_DB_PATH ||
+  path.join(process.env.DASHBOARD_DATA_DIR || path.join(__dirname, "..", "data"), "dashboard.db");
 const DB_DIR = path.dirname(DB_PATH);
 
 fs.mkdirSync(DB_DIR, { recursive: true });

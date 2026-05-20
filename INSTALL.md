@@ -168,6 +168,100 @@ Open **http://localhost:4820** in your browser.
 
 ---
 
+## macOS Desktop App (optional)
+
+If you'd rather not keep a terminal window open, the project also ships an Electron 35-based **native macOS app** (the `desktop/` workspace). It embeds the Express server in-process, renders the built React client in a `BrowserWindow`, registers a menu-bar (tray) icon, and offers a one-click "Open at Login" toggle. Everything you'd see in the browser at `localhost:4820` lives inside a single `.app` you install once.
+
+> [!NOTE]
+> The desktop app is **macOS only** (v1). The DMG is ad-hoc signed by default, so macOS Gatekeeper warns on first launch — see [Install the app](#install-the-app) for the one-line bypass.
+
+### Prerequisites
+
+| For… | You need |
+|---|---|
+| Downloading a pre-built DMG | macOS — nothing else |
+| Building the DMG locally | macOS, Node.js 18+ (22+ recommended), npm 9+, and **Xcode command-line tools** (`xcode-select --install`) so the native `better-sqlite3` module can be rebuilt for Electron's ABI |
+
+### Way 1 — Download a pre-built DMG
+
+The fastest path. There are two flavours:
+
+**1a. From the latest GitHub Release** *(recommended — public, no sign-in)*
+
+Open [**Releases → latest**](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/releases/latest) and download `ClaudeCodeMonitor-<version>-universal.dmg` from the assets. CI publishes a new `vX.Y.Z` release automatically every time the version in `package.json` is bumped on `master`, so this link always points at the current shipping build.
+
+**1b. From the per-commit CI artifact** *(useful for testing master before it's tagged — sign-in required, 14-day retention)*
+
+Every green run of the `🍎 macOS Desktop (DMG)` workflow uploads a `ClaudeCodeMonitor-dmg` artifact:
+
+- **Via the GitHub UI:** open the latest passing run under [Actions](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/actions/workflows/ci.yml?query=branch%3Amaster+is%3Asuccess), scroll to **Artifacts**, and download `ClaudeCodeMonitor-dmg`.
+- **Via the `gh` CLI:**
+
+  ```bash
+  gh run download <run-id> -R hoangsonww/Claude-Code-Agent-Monitor -n ClaudeCodeMonitor-dmg
+  ```
+
+  Unzip the artifact to get `ClaudeCodeMonitor-*-universal.dmg`.
+
+Then jump to [Install the app](#install-the-app).
+
+### Way 2 — Build the DMG locally
+
+From the project root, after `git clone`:
+
+```bash
+npm run setup                # install root + client + vscode-extension deps
+npm run build                # build the React client (the SPA the window loads)
+npm run desktop:install      # install Electron + electron-builder into desktop/
+npm run desktop:dmg:arm64    # fast single-arch DMG → desktop/release/
+```
+
+The DMG lands in `desktop/release/`. Pick the build command that matches your goal:
+
+| Command | Architecture | Speed | Use when |
+|---|---|---|---|
+| `npm run desktop:dmg` | Universal (x64 + arm64) | **Slow** | Building a release artifact for everyone |
+| `npm run desktop:dmg:arm64` | Apple Silicon only | Fast (~1 min) | Building for your own Apple Silicon Mac |
+| `npm run desktop:dmg:x64` | Intel only | Fast (~1 min) | Building for your own Intel Mac |
+| `npm run desktop:install` | — | — | Install Electron + electron-builder deps |
+| `npm run desktop:build` | — | — | TypeScript compile only (`out/`) |
+| `npm run desktop:dev` | — | — | Build, then launch Electron locally |
+| `npm run desktop:test` | — | — | Smoke test (spawn Electron, probe `/api/health`) |
+
+> [!IMPORTANT]
+> The universal `npm run desktop:dmg` build is **intentionally slow** — it builds the app twice (one tree per architecture), merges both with `@electron/universal`, then signs every binary. Expect the silent `packaging arch=universal` step to sit for several minutes. **When building for your own Mac, use `desktop:dmg:arm64` or `desktop:dmg:x64`** — a single architecture finishes in roughly a minute. CI already builds the universal DMG for you (see Way 1).
+
+### Install the app
+
+Each `desktop:dmg*` build wipes `release/` and emits a single DMG —
+`desktop:dmg:arm64` → `…-arm64.dmg`, `desktop:dmg:x64` → `…-x64.dmg`, universal
+`desktop:dmg` → `…-universal.dmg` — and its mounted-volume title states the
+architecture (e.g. *Claude Code Monitor (Apple Silicon)*). Install the one
+matching your Mac: an x64 build on Apple Silicon makes macOS prompt for Rosetta.
+
+```bash
+open desktop/release/ClaudeCodeMonitor-*-arm64.dmg   # the arch you built
+```
+
+1. The DMG mounts — drag **Claude Code Monitor** into your `Applications` folder.
+2. The DMG is ad-hoc signed, so macOS shows a Gatekeeper warning (*"Apple could not verify…"*) on first launch. Strip the quarantine attribute, then open it:
+
+   ```bash
+   xattr -cr "/Applications/Claude Code Monitor.app"
+   open "/Applications/Claude Code Monitor.app"
+   ```
+
+   Alternatively, open  → *System Settings → Privacy & Security* and click *Open Anyway*.
+
+Once running, the embedded server boots on port `4820` (or adopts an already-healthy server on `4820`, or falls back to `4821`–`4829` / a random high port), a menu-bar icon appears, and the dashboard window opens. **Hooks are installed automatically on first boot** — a DMG-only user does not need `npm run install-hooks`; just start a new Claude Code session. Closing the window hides it but keeps the server running; **Quit** from the tray exits.
+
+> [!NOTE]
+> The packaged app stores its SQLite database and VAPID keys in `~/Library/Application Support/Claude Code Monitor/data/` — **outside** the `.app` bundle. Your imported history and events therefore **survive app reinstalls and updates**. (Older builds kept the database inside the bundle, which is read-only once installed and code-signed — that broke History Import; it is now fixed. If you are upgrading from a pre-fix build, there is a one-time data gap: re-run **Settings → Import History → Rescan** once.)
+
+Full user guide: [`DESKTOP.md`](DESKTOP.md). Contributor / architecture reference: [`desktop/README.md`](desktop/README.md). Desktop-specific setup details (logs, auto-start, port adoption) are in [SETUP.md → Desktop App Setup](./SETUP.md#desktop-app-setup).
+
+---
+
 ## Optional: Local MCP server
 
 If you want AI agents to call dashboard functionality through MCP tools, run the local MCP server in `mcp/`:
@@ -376,6 +470,17 @@ The Vite dev server and Express server run on different ports. Make sure both ar
 ### No sessions appearing after starting Claude Code
 
 See [SETUP.md — Troubleshooting](./SETUP.md#troubleshooting) for detailed hook debugging steps.
+
+### macOS Desktop App issues
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| *"Apple could not verify…"* on first launch | The DMG is ad-hoc signed (no paid Apple Developer ID) | `xattr -cr "/Applications/Claude Code Monitor.app"`, then open it — or use *System Settings → Privacy & Security → Open Anyway* |
+| `npm run desktop:dmg` hangs on `packaging arch=universal` | Not hung — the universal build merges two architectures and is intentionally slow | Wait it out, or use `npm run desktop:dmg:arm64` / `npm run desktop:dmg:x64` for a fast single-arch build |
+| `entry file out/main.js does not exist` | `npm run clean` (in `desktop/`) deleted `out/`; `electron-builder` only packages, it does not compile | Re-run `npm run desktop:build` (or just use a `desktop:dmg*` script, which chains the build) |
+| Desktop window opens but is blank | The embedded server failed `/api/health` within 30 s | Check `~/Library/Logs/Claude Code Monitor/desktop.log`, then tray → *Restart Server* |
+| "Run Claude" says `claude` is not on your PATH | A Finder/Dock-launched macOS app only inherits launchd's minimal PATH, not your login-shell PATH | The app recovers your login-shell PATH at startup so it can find and spawn the `claude` CLI. If it still fails, make sure `claude` is a real executable on your shell PATH — not a shell alias or function |
+| Imported history vanished after updating the app | Older builds stored the database inside the (replaceable) `.app` bundle | Fixed — data now lives in `~/Library/Application Support/Claude Code Monitor/data/` and survives reinstalls/updates. After upgrading from a pre-fix build, re-run **Settings → Import History → Rescan** once |
 
 ---
 

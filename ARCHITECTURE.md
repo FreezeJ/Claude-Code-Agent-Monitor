@@ -72,6 +72,7 @@ Architectural overview and technical reference for the Agent Dashboard system, c
 - [Browser Notification System](#browser-notification-system)
 - [Update Notifier Subsystem](#update-notifier-subsystem)
 - [VS Code Extension Architecture](#vs-code-extension-architecture)
+- [Desktop App Architecture (macOS / Electron)](#desktop-app-architecture-macos--electron)
 - [Security Considerations](#security-considerations)
 - [Performance Characteristics](#performance-characteristics)
 - [Deployment Modes](#deployment-modes)
@@ -865,35 +866,38 @@ stateDiagram-v2
 
 ### Hook Handler Design
 
-`scripts/hook-handler.js` is designed to be a minimal, fail-safe forwarder:
+`scripts/hook-handler.js` is designed to be a minimal, fail-safe forwarder
+that **fans out to every live dashboard** on the machine in parallel:
 
 ```mermaid
 flowchart TD
     START[Claude Code fires hook] --> STDIN[Read stdin to EOF]
-    STDIN --> PARSE{Parse JSON?}
-    PARSE -->|Success| POST["POST to 127.0.0.1:4820<br/>/api/hooks/event"]
+    STDIN --> RESOLVE["resolveAllDashboardPorts()<br/>via server/lib/server-info.js"]
+    RESOLVE --> PARSE{Parse JSON?}
+    PARSE -->|Success| POST["POST to 127.0.0.1:{port}/api/hooks/event<br/>(one request per live server, parallel)"]
     PARSE -->|Failure| WRAP["Wrap raw input as<br/>#123;raw: ...#125;"]
     WRAP --> POST
-    POST --> RESP{Response?}
-    RESP -->|200| EXIT0[exit = 0]
-    RESP -->|Error| EXIT0_ERR[exit = 0]
-    RESP -->|Timeout 3s| DESTROY[Destroy request]
-    DESTROY --> EXIT0_TO[exit = 0]
+    POST --> AGG{Promise.all settled}
+    AGG -->|All resolved or rejected| EXIT0[exit = 0]
+    AGG -->|Any single timeout 3s| DESTROY[Destroy that request only]
+    DESTROY --> AGG
 
     SAFETY[Safety net: setTimeout 5s] --> EXIT0_SAFETY[exit = 0]
 
     style EXIT0 fill:#10b981,stroke:#34d399,color:#fff
-    style EXIT0_ERR fill:#10b981,stroke:#34d399,color:#fff
-    style EXIT0_TO fill:#10b981,stroke:#34d399,color:#fff
     style EXIT0_SAFETY fill:#10b981,stroke:#34d399,color:#fff
 ```
 
 **Key design decisions:**
 
-- Always exits 0 -- never blocks Claude Code regardless of server state
-- 3-second HTTP timeout + 5-second process safety net
-- Uses Node.js `http` module directly -- no dependencies
-- Reads `CLAUDE_DASHBOARD_PORT` env var for port override
+- Always exits 0 — never blocks Claude Code regardless of any server's state.
+- 3-second HTTP timeout per target + 5-second process-wide safety net.
+- Uses Node.js `http` module directly — no dependencies.
+- Resolution order is **env override → discovery file → default**:
+  - `CLAUDE_DASHBOARD_PORT` forces a single target (no fan-out, no discovery).
+  - Otherwise `server/lib/server-info.js` reads `~/.claude/.agent-dashboard.json`, prunes dead-PID entries, and returns every live `port` for the handler to POST to in parallel.
+  - If neither yields anything, the handler falls back to `4820`.
+- Per-target promises never reject — a dead listener can't starve the others, and the handler can wait on `Promise.all` for clean exit timing.
 
 ### Hook Installation
 
@@ -1774,6 +1778,292 @@ For the extension source code, refer to the [vscode-extension/](./vscode-extensi
 
 ---
 
+## Desktop App Architecture (macOS / Electron)
+
+The `desktop/` workspace ships the dashboard as a native macOS application (`Claude Code Monitor.app`, distributed as a `.dmg`). It is an Electron shell that **embeds the existing Express server in-process** and renders the already-built React client in a `BrowserWindow`. The desktop app does not reimplement the dashboard -- it `require()`s `server/index.js` directly, in the same Node runtime as the Electron main process, and points a Chromium window at it.
+
+For the user-facing guide (download, install, Gatekeeper, tray menu, auto-start), see [DESKTOP.md](./DESKTOP.md). For the full contributor/architecture reference -- including build performance, code signing, notarization, and CI details -- see [desktop/README.md](./desktop/README.md).
+
+### Workspace Position
+
+`desktop/` is a **sibling workspace**, not an npm-workspaces conversion. It has its own `package.json`, its own `node_modules`, and its own TypeScript toolchain. It pins **Electron 35** (bundled Node 22.16). It consumes the rest of the repo as plain files and touches no other workspace's runtime behavior.
+
+```mermaid
+flowchart TD
+    subgraph repo["Claude-Code-Agent-Monitor (repo root)"]
+        server["server/<br/>Express API · SQLite · WebSocket"]
+        client["client/<br/>React + Vite SPA"]
+        scripts["scripts/<br/>hook installer/handler, import, seed"]
+        mcp["mcp/<br/>local MCP server"]
+        vscode["vscode-extension/"]
+        desktop["desktop/<br/>Electron shell (sibling workspace)"]
+    end
+
+    desktop -->|"require() in-process"| server
+    desktop -->|"loads built SPA from"| client
+    desktop -->|"auto-installs hooks via"| scripts
+    server -->|"serves static"| client
+
+    style desktop fill:#1f6feb,stroke:#1158c7,color:#fff
+    style server fill:#238636,stroke:#196c2e,color:#fff
+```
+
+The **only** change outside `desktop/` is a behavior-preserving refactor of `server/index.js` (see [Background Services & Hook Bootstrap](#background-services--hook-bootstrap-1) below). `client/`, `scripts/`, `mcp/`, and `vscode-extension/` are untouched.
+
+### Process Model
+
+Electron runs a **main process** (Node.js) and one or more **renderer processes** (Chromium). In this app:
+
+- The **main process** hosts the embedded Express server _and_ manages the window, tray, and menus. There is **no child process and no IPC** for the server -- it runs inside the main process's own event loop.
+- The **renderer** is plain Chromium loading `http://127.0.0.1:<port>` -- exactly the same origin a normal browser would use. `preload.ts` is intentionally empty (`contextIsolation: true`, `nodeIntegration: false`, `webSecurity: true`), so the renderer has **zero privileged surface**.
+
+```mermaid
+flowchart LR
+    subgraph main["Electron Main Process (Node 22 / Electron 35)"]
+        boot["main.ts<br/>lifecycle"]
+        host["server-host.ts<br/>embedded server"]
+        express["server/index.js<br/>Express + WS + SQLite"]
+        tray["tray.ts"]
+        menu["menu.ts"]
+        host --> express
+        boot --> host
+        boot --> tray
+        boot --> menu
+    end
+
+    subgraph renderer["Renderer Process (Chromium)"]
+        win["BrowserWindow<br/>React dashboard"]
+        preload["preload.ts<br/>(empty -- no bridge)"]
+    end
+
+    express -->|"http + ws on 127.0.0.1:port"| win
+    win -.->|loads| preload
+
+    hooks["Claude Code hooks<br/>(separate node processes)"] -->|"POST /api/hooks/event"| express
+
+    style main fill:#0d1117,stroke:#30363d,color:#e6edf3
+    style renderer fill:#161b22,stroke:#30363d,color:#e6edf3
+```
+
+### In-Process Server Hosting
+
+`server-host.ts` is the **only file** that imports `server/index.js`. The dashboard server already exports `{ createApp, startServer, startBackgroundServices }` and serves the built React client (`client/dist`) as static assets in production -- so the host imports that module directly, with no child process, no IPC, and no port marshalling.
+
+| Component | Responsibility |
+| --- | --- |
+| **`main.ts`** | Main-process entry. Single-instance lock, app menu + tray wiring, dashboard window, `Restart Server`, lifecycle (`window-all-closed`, `before-quit`). |
+| **`server-host.ts`** | In-process Express boot: port discovery, adoption, `better-sqlite3` ABI patch, `startBackgroundServices()` + hook bootstrap, clean DB close. Returns a `ServerHandle`. |
+| **`window.ts`** | `BrowserWindow` with persisted geometry (`userData/window-state.json`). External links open in the system browser. |
+| **`menu.ts` / `tray.ts`** | Native application menu and menu-bar (tray) icon. Tray uses a single-click dropdown (left or right) with a **live status snapshot** queried straight from SQLite at click time — server port, active sessions, working agents, events today — followed by *Open Dashboard* (⌘O), *Open in Browser*, *Restart Server*, *Show Logs*, *Open at Login* (toggle), and *Quit*. The menu is rebuilt on each open so every value stays current. Snapshot rows are enabled and click-to-open-dashboard rather than disabled (which the OS dims). |
+| **`login-item.ts`** | macOS Login Items toggle via Electron's first-party `app.setLoginItemSettings` (wraps `SMAppService`) -- not a `LaunchAgent` plist. |
+| **`shell-path.ts`** | Recovers the user's login-shell `PATH` at startup and merges it onto `process.env.PATH`, so the embedded server (and the `claude` CLI it spawns) is not limited to launchd's minimal `PATH`. |
+| **`logger.ts`** | File logger to `~/Library/Logs/Claude Code Monitor/desktop.log` (the main process has no console when launched from Finder). |
+
+`server-host.ts` resolves the directory containing the bundled `server/` and `client/dist/` via `resolveAppRoot()`: `process.resourcesPath/app` when packaged, or the repo root (one directory up from `desktop/`) in development.
+
+The `ServerHandle` returned to `main.ts`:
+
+```ts
+interface ServerHandle {
+  url: string; // e.g. "http://127.0.0.1:4820"
+  port: number;
+  ownedByUs: boolean; // false when an existing server was adopted
+  stop: () => Promise<void>;
+}
+```
+
+### Port Discovery & Adoption
+
+On startup `server-host.ts` picks a port, then either adopts an already-healthy server or boots its own. **Adoption** -- `probePort()` connects to `:4820`, then checks that the listener answers `GET /api/health` with `{ status: "ok" }`. If a healthy dashboard server is already running there (e.g. the user ran `npm start` in a terminal), the desktop app **adopts** it rather than double-binding -- no SQLite contention. An adopted server is not owned by the app, so quitting the app leaves it running.
+
+```mermaid
+flowchart TD
+    start["startEmbeddedServer()"] --> forced{"CCAM_DESKTOP_BIND_PORT set?"}
+    forced -->|yes| bind["bind exactly that port<br/>(no adoption, no fallback)"]
+    forced -->|no| adopt{"healthy server<br/>already on :4820?"}
+    adopt -->|yes| reuse["adopt it<br/>ownedByUs = false"]
+    adopt -->|no| pick["pickFreePort()"]
+
+    pick --> p1{":4820 free?"}
+    p1 -->|yes| use4820["use 4820"]
+    p1 -->|no| p2{"any of<br/>:4821–:4829 free?"}
+    p2 -->|yes| usefb["use that"]
+    p2 -->|no| p3{"any of<br/>:49152–:49500 free?"}
+    p3 -->|yes| userand["use that"]
+    p3 -->|no| fail["throw — no free port"]
+
+    bind --> bootsrv["createApp() + startServer()"]
+    use4820 --> bootsrv
+    usefb --> bootsrv
+    userand --> bootsrv
+    bootsrv --> healthy["waitForHealthy()<br/>poll /api/health ≤ 30s"]
+    healthy --> bg["bootstrapOwnedServer()"]
+    bg --> handle["ServerHandle ownedByUs = true"]
+    reuse --> handleR["ServerHandle ownedByUs = false"]
+
+    style reuse fill:#9e6a03,stroke:#7d5300,color:#fff
+    style fail fill:#da3633,stroke:#b62324,color:#fff
+```
+
+Port preference order is **4820 → 4821–4829 → a random port in 49152–49500**. Two environment overrides exist primarily for testing: `CCAM_DESKTOP_BIND_PORT` binds an exact port (disabling adoption and fallback, used by the smoke test), and `CCAM_DESKTOP_NO_ADOPT=1` always starts a fresh server. Before `require()`ing the server module, the host sets `NODE_ENV=production`, `DASHBOARD_PORT=<port>`, and `DASHBOARD_DATA_DIR=<userData>/data` (see [Writable Data Directory](#writable-data-directory) below) so the server reads them from `process.env`.
+
+### Writable Data Directory
+
+A packaged `.app` bundle is **read-only**: once installed under `/Applications`, code-signed, or run through macOS **app translocation**, `Resources/app/` cannot be written to. The dashboard's SQLite database and the VAPID keypair (`server/lib/push.js`) are writable state, so they must not live inside the bundle. Before booting the embedded server, `server-host.ts` creates `app.getPath('userData')/data` and points the server at it via the `DASHBOARD_DATA_DIR` environment variable:
+
+- `server/db.js` honors `DASHBOARD_DATA_DIR` for the SQLite file.
+- `server/lib/push.js` honors it for the persisted VAPID keys.
+
+The resulting location is `~/Library/Application Support/Claude Code Monitor/data/`. Because this lives outside the bundle, imported history and persisted events **survive an app reinstall or update**. Without this, writing a database into `Resources/app/` failed on a packaged build and broke History Import and event persistence.
+
+The standalone `node server/index.js` path is **unaffected**: `DASHBOARD_DATA_DIR` is unset there, and `server-host.ts` only sets it when it is not already defined -- so `server/db.js` falls back to its usual repo-relative default.
+
+### Shell `PATH` Recovery
+
+A macOS app launched from Finder, the Dock, or Login Items auto-start is spawned by `launchd`, which hands it a **minimal `PATH`** (roughly `/usr/bin:/bin:/usr/sbin:/sbin`) and does **not** source the user's shell profile. The dashboard's "Run Claude" feature (`server/routes/run.js`, `server/lib/run-spawner.js`) spawns the `claude` CLI, which is almost always installed somewhere only the shell `PATH` knows about (`/opt/homebrew/bin`, `~/.local/bin`, `~/.claude/local`, a Node version-manager's bin dir). Under launchd's `PATH`, `claude` cannot be resolved or spawned.
+
+`shell-path.ts` repairs this **before the server boots**: at startup it runs the user's login+interactive shell once (`$SHELL -ilc`, so `.zprofile`/`.zshrc` are sourced), captures the resulting `PATH` between sentinel markers, and merges it -- plus a fallback list of common CLI install directories -- onto `process.env.PATH`. The merge is order-preserving and deduplicated, so it is idempotent. Because the embedded server runs in the same process, it and every `claude` it spawns inherit the corrected `PATH`. (A `claude` shell _alias_ or _function_ still cannot be spawned -- only a real executable on the `PATH` can.)
+
+### `better-sqlite3` Native-Module Handling
+
+`better-sqlite3` is the only **native** module in the dependency tree, and a native module must be compiled against the exact Node ABI it runs on. The repo-root copy is built for the **system Node** (so `npm run test:server` works for contributors); Electron ships its **own Node ABI**.
+
+The desktop workspace solves this without disturbing the root install: the desktop workspace has its own `better-sqlite3`, rebuilt for Electron's Node ABI by `electron-builder install-app-deps` (run in its `postinstall`). `server-host.ts` then installs a one-time, **process-local** patch to `Module._resolveFilename` that redirects `require("better-sqlite3")` -- from anywhere in the embedded server -- to that ABI-correct copy.
+
+```mermaid
+flowchart TD
+    subgraph desk["desktop/node_modules"]
+        d1["better-sqlite3<br/>rebuilt for Electron's ABI<br/>(electron-builder install-app-deps)"]
+    end
+    subgraph root["node_modules (repo root)"]
+        r1["better-sqlite3<br/>built for system Node<br/>(used by npm run test:server)"]
+    end
+
+    patch["ensureNativeModulesPatched()<br/>overrides Module._resolveFilename"]
+    srv["server/db.js<br/>require('better-sqlite3')"]
+
+    srv -->|"request intercepted"| patch
+    patch -->|"redirected to"| d1
+    patch -.->|"everything else<br/>passes through"| root
+
+    style d1 fill:#238636,stroke:#196c2e,color:#fff
+    style patch fill:#1f6feb,stroke:#1158c7,color:#fff
+```
+
+- The patch is installed exactly once, **before** `server/index.js` is `require()`d, and rewrites _only_ `require("better-sqlite3")` -- every other module resolves normally.
+- `electron-builder.yml` therefore **excludes** the root `better-sqlite3` from the bundle (it would trip `@electron/universal`'s identical-file detector) and `asarUnpack`s the desktop copy (native `.node` files cannot live inside an `asar` archive).
+- The `compat-sqlite` (`node:sqlite`) fallback remains a safety net -- one reason the desktop app pins **Electron 35**, whose bundled Node 22.16 has `node:sqlite`.
+
+### Background Services & Hook Bootstrap
+
+`node server/index.js` runs its production bootstrap from an `if (require.main === module)` block. Because the desktop app **`require()`s** that module, the block never fires -- so the bootstrap was extracted into an exported `startBackgroundServices()` that both paths call. This is a **behavior-preserving refactor** of `server/index.js`: the standalone server path is functionally unchanged.
+
+```mermaid
+flowchart LR
+    subgraph standalone["node server/index.js"]
+        s1["require.main === module"] --> s2["startBackgroundServices()"]
+    end
+    subgraph desktopapp["desktop app"]
+        d1["server-host.ts<br/>bootstrapOwnedServer()"] --> d2["startBackgroundServices()"]
+        d1 --> d3["installHooks()"]
+    end
+
+    d2 --> svc
+    s2 --> svc
+    subgraph svc["Background services"]
+        u["update scheduler"]
+        w["cc-watcher (Claude config watcher)"]
+        r["orphaned-run reconciliation"]
+    end
+
+    style d1 fill:#1f6feb,stroke:#1158c7,color:#fff
+```
+
+`bootstrapOwnedServer()` runs **once** -- guarded by a module-level flag so a `Restart Server` does not double-register schedulers or watchers -- and:
+
+1. Calls `startBackgroundServices()` -- the update scheduler, the `cc-watcher` config watcher, and one-time orphaned-run reconciliation.
+2. Calls `installHooks()` -- writes the Claude Code hook configuration to `~/.claude/settings.json`, so a DMG-only user gets events flowing without ever running `npm run install-hooks` from a checkout.
+
+It runs only when the server is **owned** by the app -- an adopted server has already done its own bootstrap.
+
+### App Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant OS as macOS
+    participant Main as main.ts
+    participant Host as server-host.ts
+    participant Srv as server/index.js
+    participant UI as BrowserWindow
+
+    OS->>Main: launch app
+    Main->>Main: requestSingleInstanceLock()
+    alt lock not acquired
+        Main->>OS: exit(0) — focus existing instance
+    end
+    Main->>Host: ensureUserPath() — recover login-shell PATH
+    Main->>Host: startEmbeddedServer()
+    Host->>Host: probe :4820 — adopt if a healthy server answers
+    alt no server to adopt
+        Host->>Host: pickFreePort() · set DASHBOARD_DATA_DIR · patch better-sqlite3 ABI
+        Host->>Srv: require() · createApp() · startServer(port)
+        Host->>Srv: waitForHealthy() — poll /api/health ≤ 30s
+        Host->>Srv: bootstrapOwnedServer() — schedulers, cc-watcher, install hooks
+    end
+    Host-->>Main: ServerHandle { url, port, ownedByUs, stop }
+    Main->>Main: installApplicationMenu() · createTray()
+    alt launched at login
+        Main->>OS: stay tray-only, hide dock
+    else normal launch
+        Main->>UI: createDashboardWindow(url)
+        UI->>Srv: GET http://127.0.0.1:port
+    end
+    Note over Main: window "close" → hide (server keeps running)
+    Note over Main: before-quit → stop owned server + closeEmbeddedDatabase()
+```
+
+| Event | Behavior |
+| --- | --- |
+| **Second launch** | `requestSingleInstanceLock()` fails -- the new process exits and the existing window is focused. |
+| **Window close** | Intercepted -- the window **hides** (`hide()`); the server and tray keep running. |
+| **`window-all-closed`** | App stays alive in tray-only mode (the handler is intentionally a no-op). |
+| **Launched at login** | The dashboard window is **not** shown -- only the tray icon (`openAsHidden`, dock hidden). |
+| **`before-quit`** | If the server is owned: stop the HTTP server, then `closeEmbeddedDatabase()` for a clean WAL checkpoint, then `app.exit(0)`. The DB handle is closed here -- never on `Restart Server`, where the cached `server/db.js` singleton must stay usable. |
+
+### Packaged App Layout
+
+`electron-builder` produces `Claude Code Monitor.app`. The Electron main-process code is compiled (`tsc` → `out/`) and packed into `app.asar`; the rest of the repo is shipped as **`extraResources`** -- plain files under `Resources/app/`.
+
+```mermaid
+flowchart TD
+    appbundle["Claude Code Monitor.app"]
+    appbundle --> contents["Contents/"]
+    contents --> macos["MacOS/ — Electron binary"]
+    contents --> res["Resources/"]
+    res --> asar["app.asar<br/>(compiled out/**, package.json)"]
+    res --> unpacked["app.asar.unpacked/<br/>node_modules/better-sqlite3 (.node)"]
+    res --> appdir["app/"]
+    appdir --> a1["server/   — Express server (no tests)"]
+    appdir --> a2["client/dist/ — built React SPA"]
+    appdir --> a3["scripts/  — hook-handler, install-hooks"]
+    appdir --> a4["node_modules/ — server runtime deps"]
+    appdir --> a5["package.json"]
+
+    style asar fill:#1f6feb,stroke:#1158c7,color:#fff
+    style appdir fill:#238636,stroke:#196c2e,color:#fff
+```
+
+At runtime `server-host.ts` resolves this root as `process.resourcesPath/app` when packaged. Everything under `Resources/app/` is **read-only** on a packaged, signed, or app-translocated bundle -- so all writable state (the SQLite database, VAPID keys) lives in `~/Library/Application Support/Claude Code Monitor/data/`, **never inside the bundle** (see [Writable Data Directory](#writable-data-directory)).
+
+`electron-builder` produces a **universal** (x64 + arm64) DMG, ad-hoc signed by default so anyone can build a working `.dmg` without a paid Apple Developer account; real Developer ID signing and notarization are opt-in via environment variables (`CSC_LINK`, `APPLE_ID`, etc.). CI runs a path-filtered `🍎 macOS Desktop (DMG)` job on `macos-latest`. The `desktop/scripts/prebuild.js` guard also **self-heals** a `better-sqlite3` native binary that a prior cross-arch DMG build (`electron-builder --mac --x64/--arm64`) left compiled for the wrong CPU architecture -- it detects the mismatch via `file` and re-runs `electron-builder install-app-deps`, so `desktop:dev` and `desktop:test` do not fail with `ERR_DLOPEN_FAILED`. See [`desktop/README.md`](./desktop/README.md) for the full build pipeline, build-performance notes, and signing details.
+
+### Relation to Standalone Deployment
+
+The desktop app is a fourth deployment mode alongside Development, Production, and Container (see [Deployment Modes](#deployment-modes)). The data path is **identical to the standalone Production path** -- Claude Code hooks `POST /api/hooks/event` to the embedded Express server, which writes to SQLite and broadcasts over WebSocket to the renderer. The only structural difference is that the server runs inside the Electron main process instead of a standalone `node server/index.js`, and the renderer is a `BrowserWindow` rather than a browser tab pointed at the same origin.
+
+---
+
 ## Security Considerations
 
 | Area                   | Approach                                                                                                                                                   |
@@ -1858,6 +2148,26 @@ graph LR
 | **API proxy**     | Vite proxies `/api` + `/ws` to :4820 | Same origin, no proxy needed    |
 | **File watching** | `node --watch` + Vite HMR            | None                            |
 | **Source maps**   | Inline                               | External files                  |
+
+### Desktop App (macOS)
+
+The native macOS app is a self-contained deployment mode: a single Electron process embeds the Express server in-process and renders the React client in a `BrowserWindow`. No terminal, no separate `npm start`.
+
+```mermaid
+graph LR
+    LAUNCH["Open Claude Code Monitor.app"] --> MAIN["Electron main process<br/>(Node 22 / Electron 35)"]
+    MAIN --> HOST["server-host.ts<br/>port discovery + adopt"]
+    HOST --> SERVER["server/index.js (in-process)<br/>Port 4820 → fallback"]
+    SERVER -->|serves| DIST["client/dist/<br/>(extraResources)"]
+    MAIN --> WIN["BrowserWindow"]
+    WIN --> SERVER
+
+    style MAIN fill:#1f6feb,stroke:#1158c7,color:#fff
+    style SERVER fill:#339933,stroke:#5cb85c,color:#fff
+    style DIST fill:#646CFF,stroke:#818cf8,color:#fff
+```
+
+The hook ingestion path (Claude Code hooks → `POST /api/hooks/event` → SQLite → WebSocket) is **identical to the standalone Production path** -- only the process that hosts the server differs. See [Desktop App Architecture](#desktop-app-architecture-macos--electron) for the full design.
 
 ### MCP Sidecar (Optional)
 

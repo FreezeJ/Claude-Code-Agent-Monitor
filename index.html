@@ -681,6 +681,24 @@
         font-size: 17px;
         margin: 0 0 48px;
       }
+      .install-subtitle {
+        font-size: clamp(23px, 2.6vw, 31px);
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        font-weight: 700;
+        margin: 0 0 20px;
+      }
+      .install-group {
+        margin-top: 72px;
+      }
+      /* Prevent long URLs / long literal tokens in `<code>` from overflowing
+         their feature / how-step cards. `anywhere` allows wrap at any char,
+         which is fine for URLs and won't hyphenate normal prose. */
+      .feature-card code,
+      .how-step code {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
       .features-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -2368,6 +2386,14 @@
               <span class="marquee-item"><span class="dot emerald"></span>SQLite (WAL)</span>
               <span class="marquee-item"><span class="dot amber"></span>OpenAPI 3.0</span>
               <span class="marquee-item"><span class="dot pink"></span>Mermaid diagrams</span>
+              <span class="marquee-item"><span class="dot violet"></span>macOS desktop app</span>
+              <span class="marquee-item"><span class="dot emerald"></span>Native macOS toasts</span>
+              <span class="marquee-item"><span class="dot rose"></span>Hooks fan-out</span>
+              <span class="marquee-item"><span class="dot cyan"></span>Tray live snapshot</span>
+              <span class="marquee-item"><span class="dot amber"></span>⌘Q confirmation</span>
+              <span class="marquee-item"><span class="dot"></span>Auto-port discovery</span>
+              <span class="marquee-item"><span class="dot pink"></span>Discovery file</span>
+              <span class="marquee-item"><span class="dot violet"></span>CI auto-release</span>
               <!-- duplicate for seamless loop -->
               <span class="marquee-item"><span class="dot"></span>Real-time hooks ingestion</span>
               <span class="marquee-item"><span class="dot cyan"></span>Stream-json output</span>
@@ -2381,6 +2407,14 @@
               <span class="marquee-item"><span class="dot emerald"></span>SQLite (WAL)</span>
               <span class="marquee-item"><span class="dot amber"></span>OpenAPI 3.0</span>
               <span class="marquee-item"><span class="dot pink"></span>Mermaid diagrams</span>
+              <span class="marquee-item"><span class="dot violet"></span>macOS desktop app</span>
+              <span class="marquee-item"><span class="dot emerald"></span>Native macOS toasts</span>
+              <span class="marquee-item"><span class="dot rose"></span>Hooks fan-out</span>
+              <span class="marquee-item"><span class="dot cyan"></span>Tray live snapshot</span>
+              <span class="marquee-item"><span class="dot amber"></span>⌘Q confirmation</span>
+              <span class="marquee-item"><span class="dot"></span>Auto-port discovery</span>
+              <span class="marquee-item"><span class="dot pink"></span>Discovery file</span>
+              <span class="marquee-item"><span class="dot violet"></span>CI auto-release</span>
             </div>
           </div>
           <div class="marquee reverse">
@@ -2397,6 +2431,13 @@
               <span class="marquee-item"><span class="dot"></span>Kanban board</span>
               <span class="marquee-item"><span class="dot cyan"></span>Update notifier</span>
               <span class="marquee-item"><span class="dot emerald"></span>Local-first, zero telemetry</span>
+              <span class="marquee-item"><span class="dot violet"></span>Run web + desktop together</span>
+              <span class="marquee-item"><span class="dot amber"></span>History import &amp; backfill</span>
+              <span class="marquee-item"><span class="dot pink"></span>Native title bar</span>
+              <span class="marquee-item"><span class="dot rose"></span>Open-at-Login</span>
+              <span class="marquee-item"><span class="dot cyan"></span>SMAppService integration</span>
+              <span class="marquee-item"><span class="dot"></span>Single-instance lock</span>
+              <span class="marquee-item"><span class="dot emerald"></span>Per-arch DMG titles</span>
               <!-- duplicate -->
               <span class="marquee-item"><span class="dot violet"></span>Compaction-aware tokens</span>
               <span class="marquee-item"><span class="dot rose"></span>Per-model cost tracking</span>
@@ -2410,6 +2451,13 @@
               <span class="marquee-item"><span class="dot"></span>Kanban board</span>
               <span class="marquee-item"><span class="dot cyan"></span>Update notifier</span>
               <span class="marquee-item"><span class="dot emerald"></span>Local-first, zero telemetry</span>
+              <span class="marquee-item"><span class="dot violet"></span>Run web + desktop together</span>
+              <span class="marquee-item"><span class="dot amber"></span>History import &amp; backfill</span>
+              <span class="marquee-item"><span class="dot pink"></span>Native title bar</span>
+              <span class="marquee-item"><span class="dot rose"></span>Open-at-Login</span>
+              <span class="marquee-item"><span class="dot cyan"></span>SMAppService integration</span>
+              <span class="marquee-item"><span class="dot"></span>Single-instance lock</span>
+              <span class="marquee-item"><span class="dot emerald"></span>Per-arch DMG titles</span>
             </div>
           </div>
           <div class="marquee slow">
@@ -2426,6 +2474,11 @@
               <span class="marquee-item"><span class="dot amber"></span>Single binary, single port</span>
               <span class="marquee-item"><span class="dot pink"></span>Inspect every plugin</span>
               <span class="marquee-item"><span class="dot emerald"></span>Works fully offline</span>
+              <span class="marquee-item"><span class="dot rose"></span>One-DMG-per-build</span>
+              <span class="marquee-item"><span class="dot violet"></span>Quit cleanly w/ WAL checkpoint</span>
+              <span class="marquee-item"><span class="dot cyan"></span>Auto-import legacy sessions</span>
+              <span class="marquee-item"><span class="dot pink"></span>PID-liveness pruning</span>
+              <span class="marquee-item"><span class="dot amber"></span>Dock icon stays on close</span>
               <span class="marquee-item"><span class="dot emerald"></span>Spawn Claude in one click</span>
               <span class="marquee-item"><span class="dot cyan"></span>Resume any session instantly</span>
               <span class="marquee-item"><span class="dot violet"></span>Watch tool calls live</span>
@@ -2438,6 +2491,11 @@
               <span class="marquee-item"><span class="dot amber"></span>Single binary, single port</span>
               <span class="marquee-item"><span class="dot pink"></span>Inspect every plugin</span>
               <span class="marquee-item"><span class="dot emerald"></span>Works fully offline</span>
+              <span class="marquee-item"><span class="dot rose"></span>One-DMG-per-build</span>
+              <span class="marquee-item"><span class="dot violet"></span>Quit cleanly w/ WAL checkpoint</span>
+              <span class="marquee-item"><span class="dot cyan"></span>Auto-import legacy sessions</span>
+              <span class="marquee-item"><span class="dot pink"></span>PID-liveness pruning</span>
+              <span class="marquee-item"><span class="dot amber"></span>Dock icon stays on close</span>
             </div>
           </div>
         </div>
@@ -2653,6 +2711,48 @@
               Full dashboard sidebar inside VS Code. Monitor active sessions, view agents, and
               track tool calls without leaving your editor. Ships as a VSIX with zero external
               dependencies.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon violet">🍎</div>
+            <h3>macOS desktop app</h3>
+            <p>
+              The whole dashboard as a native macOS <code>.app</code>, built with Electron 35. It
+              embeds the Express server in-process, lives in the menu bar with a live status
+              snapshot dropdown, auto-starts at login, and installs Claude Code hooks on first
+              boot - zero-setup monitoring. Runs alongside <code>npm run dev</code> with hooks
+              fanning out to both dashboards in parallel.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon cyan">📰</div>
+            <h3>Live activity feed</h3>
+            <p>
+              A real-time streaming event log with pause/resume buffering, multi-dimension
+              filters, color-coded entries by event type, expandable hook payloads, and
+              per-row session navigation. WebSocket-scoped updates so off-screen events never
+              cost a refetch.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon emerald">📥</div>
+            <h3>History import &amp; backfill</h3>
+            <p>
+              Rescan <code>~/.claude/projects/</code>, point at any directory, or drag-drop a
+              <code>.tar.gz</code> archive of transcripts. Imports are <strong>idempotent</strong>
+              — per-event-type high-water marks dedupe re-runs — with WebSocket progress, archive
+              extraction limits, and full subagent JSONL parsing.
+            </p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon amber">🔔</div>
+            <h3>Cross-surface notifications</h3>
+            <p>
+              Configurable per event type (new session, error, completion, subagent spawn). The
+              web dashboard uses Web Push (VAPID); the macOS app fires <strong>native macOS
+              toasts</strong> directly from the embedded server, side-stepping Web Push (which
+              has no FCM credentials inside Electron). Both surfaces stay live when running
+              together.
             </p>
           </div>
         </div>
@@ -2889,6 +2989,16 @@
               </div>
             </div>
           </div>
+          <div class="showcase-card" data-cat="system" data-title="macOS Desktop App">
+            <div class="showcase-img">
+              <img src="images/macos.png" alt="Claude Code Monitor running as a native macOS desktop app" loading="lazy" />
+              <span class="showcase-expand-icon">⤢</span>
+              <div class="showcase-overlay">
+                <h4>macOS Desktop App</h4>
+                <p>Native .app — menu-bar tray with a live snapshot dropdown, Open-at-Login, embedded server, native notifications. Runs alongside the web dashboard with real-time intact on both.</p>
+              </div>
+            </div>
+          </div>
           <div class="showcase-card" data-cat="system" data-title="VS Code Extension">
             <div class="showcase-img">
               <img src="vscode-extension/vscode.png" alt="VS Code extension sidebar" loading="lazy" />
@@ -3083,7 +3193,7 @@
             <h4>Monitor without leaving the editor</h4>
             <p>
               Use the VS Code extension sidebar to watch sessions and tool calls while you code.
-              No browser tab needed — everything docks into VS Code as a side panel.
+              No browser tab needed - everything docks into VS Code as a side panel.
             </p>
             <div class="archetype-tags">
               <span class="archetype-tag">VS Code</span>
@@ -3104,6 +3214,12 @@
             up immediately because the dashboard auto-installs its hooks into your existing
             <code>~/.claude/settings.json</code>.
           </p>
+        </div>
+
+        <!-- ─── WEB APP ───────────────────────────────────── -->
+        <div class="reveal">
+          <div class="section-eyebrow">Web app</div>
+          <h3 class="install-subtitle">Run it from your browser.</h3>
         </div>
         <div class="install reveal">
           <div class="install-text">
@@ -3162,6 +3278,180 @@
 </pre>
           </div>
         </div>
+
+        <!-- ─── macOS APP ──────────────────────────────────── -->
+        <div class="reveal install-group">
+          <div class="section-eyebrow">macOS app</div>
+          <h3 class="install-subtitle">Install it once, forget the terminal.</h3>
+          <p class="section-lead">
+            Prefer not to keep a terminal open? The dashboard also ships as a native macOS
+            <code>.app</code> - an Electron 35 shell that embeds the same Express server
+            in-process and renders the built React client in a native window. Same dashboard,
+            macOS-native lifecycle on top.
+          </p>
+        </div>
+        <div class="how-grid reveal-stagger">
+          <div class="how-step">
+            <div class="how-step-num">01</div>
+            <h4>Native, menu-bar-first</h4>
+            <p>
+              A menu-bar (tray) icon with a single-click dropdown showing a <strong>live status
+              snapshot</strong> (sessions, agents, events today), a native macOS title bar with
+              the conventional traffic-light row, single-instance lock, and
+              window-close-hides-but-server-keeps-running. ⌘Q opens a confirmation dialog (press
+              ⌘Q again to skip it).
+            </p>
+          </div>
+          <div class="how-step">
+            <div class="how-step-num">02</div>
+            <h4>Auto-start at login</h4>
+            <p>
+              Toggle <em>Open at Login</em> from the tray menu - it registers through macOS's
+              native Login Items, so the dashboard is always running when you sit down.
+            </p>
+          </div>
+          <div class="how-step">
+            <div class="how-step-num">03</div>
+            <h4>Zero-setup, durable data</h4>
+            <p>
+              On first boot the app installs Claude Code hooks and starts background services
+              automatically - a DMG-only user gets monitoring with essentially no manual setup.
+              Your SQLite database lives in
+              <code>~/Library/Application Support/Claude Code Monitor/data/</code>, outside the
+              <code>.app</code> bundle, so it survives reinstalls and updates. The app also
+              recovers your login-shell <code>PATH</code> at startup, so <em>Run Claude</em> can
+              find and launch the <code>claude</code> CLI. Notifications are delivered as
+              <strong>native macOS toasts</strong> from the embedded server (Web Push doesn't
+              work reliably inside Electron).
+            </p>
+          </div>
+          <div class="how-step">
+            <div class="how-step-num">04</div>
+            <h4>Coexists with the web dashboard</h4>
+            <p>
+              Run the desktop app and <code>npm run dev</code> at the same time and both stay
+              real-time. Every running dashboard appends its <code>{port, pid, startedAt}</code>
+              entry to <code>~/.claude/.agent-dashboard.json</code> on startup; the hook handler
+              fans each hook out to every live entry in parallel, so both UIs receive the same
+              events and both their SQLite stores stay in sync. Stale entries self-evict via a
+              PID liveness check on read.
+            </p>
+          </div>
+          <div class="how-step">
+            <div class="how-step-num">05</div>
+            <h4>macOS only, for now</h4>
+            <p>
+              v1 targets macOS. The DMG is ad-hoc signed, so Gatekeeper warns on first launch -
+              one command clears it (see below). Windows and Linux are out of scope for now.
+            </p>
+          </div>
+        </div>
+        <div class="install reveal install-group">
+          <div class="install-text">
+            <h3>Get it in two ways.</h3>
+            <p>
+              <strong>Download a pre-built DMG - no build required.</strong> Hit the
+              button below to land on the <strong>latest GitHub Release</strong>; grab
+              the universal <code>ClaudeCodeMonitor-&lt;version&gt;-universal.dmg</code>
+              from its assets and drag the app into <code>/Applications</code>. The link
+              always redirects to the current release because CI publishes a new
+              <code>vX.Y.Z</code> automatically every time the version in
+              <code>package.json</code> is bumped on <code>master</code>. Releases are
+              public - no GitHub sign-in required.
+            </p>
+            <p>
+              Want a <strong>per-commit build from CI</strong> instead of waiting for a
+              release? The macOS Desktop (DMG) workflow uploads a
+              <code>ClaudeCodeMonitor-dmg</code> artifact on every green run - useful
+              for testing master before it's tagged. Or
+              <strong>build it yourself</strong>: arch-specific builds
+              (<code>arm64</code> / <code>x64</code>) finish in about a minute, while
+              the universal <code>desktop:dmg</code> build is intentionally slow (it
+              builds twice and merges both architectures), so reserve it for release
+              artifacts. The DMG is roughly 80&nbsp;MB, about 250&nbsp;MB installed.
+            </p>
+            <a
+              href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/releases/latest"
+              class="btn btn-primary"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download the latest release
+            </a>
+            <a
+              href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/actions/workflows/ci.yml?query=branch%3Amaster+is%3Asuccess"
+              class="btn btn-tertiary"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <polyline points="12 7 12 12 15 14" />
+              </svg>
+              Per-commit CI builds
+            </a>
+            <a
+              href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/blob/master/DESKTOP.md"
+              class="btn btn-tertiary"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              Full desktop app guide
+            </a>
+            <a
+              href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/blob/master/desktop/README.md"
+              class="btn btn-tertiary"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="16 18 22 12 16 6" />
+                <polyline points="8 6 2 12 8 18" />
+              </svg>
+              Architecture reference
+            </a>
+          </div>
+          <div class="code-window">
+            <div class="code-window-bar">
+              <span class="traffic red"></span>
+              <span class="traffic yellow"></span>
+              <span class="traffic green"></span>
+              <span class="code-window-title">~/Claude-Code-Agent-Monitor - zsh</span>
+              <button class="code-window-copy" onclick="copyInstall(this)" aria-label="Copy desktop build commands">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                <span class="copy-label">Copy</span>
+              </button>
+            </div>
+            <pre class="code-block" id="desktop-block"><span class="comment"># Build the macOS .app locally</span>
+<span class="prompt">$</span>npm run setup
+<span class="prompt">$</span>npm run build
+<span class="prompt">$</span>npm run desktop:install
+
+<span class="comment"># Fast - one architecture (recommended for your own Mac)</span>
+<span class="prompt">$</span>npm run desktop:dmg:arm64   <span class="comment"># Apple Silicon</span>
+<span class="prompt">$</span>npm run desktop:dmg:x64     <span class="comment"># Intel</span>
+
+<span class="comment"># Universal build - x64 + arm64, correct for release, SLOW</span>
+<span class="prompt">$</span>npm run desktop:dmg
+
+<span class="comment"># Open the DMG, drag the app to Applications, then clear</span>
+<span class="comment"># the Gatekeeper quarantine on first launch:</span>
+<span class="prompt">$</span>xattr -cr <span class="str">"/Applications/Claude Code Monitor.app"</span>
+</pre>
+          </div>
+        </div>
       </section>
 
       <!-- ─── PAGES ─────────────────────────────────────── -->
@@ -3170,7 +3460,7 @@
           <div class="section-eyebrow">Tour the dashboard</div>
           <h2 class="section-title">A purpose-built page for every job.</h2>
           <p class="section-lead">
-            Each route is its own focused workspace — kanban for at-a-glance status, sessions for
+            Each route is its own focused workspace - kanban for at-a-glance status, sessions for
             drill-down, analytics for trends, run for live spawning. They all sit on the same
             hook-driven event store, so what you see anywhere is the same source of truth.
           </p>
@@ -3189,7 +3479,7 @@
               <div class="page-card-title"><span class="page-card-dot"></span><span class="page-card-name">Kanban</span></div>
               <code class="page-card-route">/kanban</code>
             </div>
-            <p class="page-card-desc">Drag-free swim lanes by agent status — waiting, working, completed, error, abandoned.</p>
+            <p class="page-card-desc">Drag-free swim lanes by agent status - waiting, working, completed, error, abandoned.</p>
             <svg class="page-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg>
           </a>
           <a href="wiki/#ss-sessions" class="page-card" style="--page-accent: var(--cyan)" target="_blank" rel="noopener noreferrer">
@@ -3221,7 +3511,7 @@
               <div class="page-card-title"><span class="page-card-dot"></span><span class="page-card-name">Analytics</span></div>
               <code class="page-card-route">/analytics</code>
             </div>
-            <p class="page-card-desc">Cost trends, model mix, tool usage, error rates, productivity heatmaps — 11 datasets.</p>
+            <p class="page-card-desc">Cost trends, model mix, tool usage, error rates, productivity heatmaps - 11 datasets.</p>
             <svg class="page-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 5 7 7-7 7"/></svg>
           </a>
           <a href="wiki/#ss-workflows" class="page-card" style="--page-accent: var(--rose)" target="_blank" rel="noopener noreferrer">
@@ -3302,6 +3592,22 @@
           <div class="stack-item"><div class="stack-item-icon">🐍</div><div class="stack-item-name">Python 3</div><div class="stack-item-desc">statusline script</div></div>
           <div class="stack-item"><div class="stack-item-icon">☁️</div><div class="stack-item-name">Coralogix</div><div class="stack-item-desc">observability</div></div>
           <div class="stack-item"><div class="stack-item-icon">🔭</div><div class="stack-item-name">OpenTelemetry</div><div class="stack-item-desc">collector</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🖥️</div><div class="stack-item-name">Electron 35</div><div class="stack-item-desc">macOS .app shell</div></div>
+          <div class="stack-item"><div class="stack-item-icon">📦</div><div class="stack-item-name">electron-builder</div><div class="stack-item-desc">DMG packaging</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🤖</div><div class="stack-item-name">Claude CLI</div><div class="stack-item-desc">spawned via Run page</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🔔</div><div class="stack-item-name">web-push</div><div class="stack-item-desc">VAPID push library</div></div>
+          <div class="stack-item"><div class="stack-item-icon">📄</div><div class="stack-item-name">swagger-ui-express</div><div class="stack-item-desc">interactive API docs</div></div>
+          <div class="stack-item"><div class="stack-item-icon">📤</div><div class="stack-item-name">multer</div><div class="stack-item-desc">multipart upload</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🗜️</div><div class="stack-item-name">adm-zip</div><div class="stack-item-desc">zip extract (bombs-safe)</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🪢</div><div class="stack-item-name">tar</div><div class="stack-item-desc">tar/tgz extract</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🌍</div><div class="stack-item-name">cors</div><div class="stack-item-desc">Express CORS</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🧵</div><div class="stack-item-name">ws</div><div class="stack-item-desc">WebSocket server</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🔑</div><div class="stack-item-name">SMAppService</div><div class="stack-item-desc">macOS Login Items</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🚦</div><div class="stack-item-name">concurrently</div><div class="stack-item-desc">dev process orchestrator</div></div>
+          <div class="stack-item"><div class="stack-item-icon">⚙️</div><div class="stack-item-name">@types/node</div><div class="stack-item-desc">strict TS in desktop/</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🆔</div><div class="stack-item-name">uuid</div><div class="stack-item-desc">v4 ids</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🪟</div><div class="stack-item-name">Chromium</div><div class="stack-item-desc">embedded BrowserWindow</div></div>
+          <div class="stack-item"><div class="stack-item-icon">🍎</div><div class="stack-item-name">macOS native APIs</div><div class="stack-item-desc">tray, dock, dialog</div></div>
         </div>
       </section>
 
@@ -3397,6 +3703,30 @@
             </div></div>
           </details>
           <details class="faq-item">
+            <summary>Is there a desktop app, and how is it different from running the server?</summary>
+            <div class="faq-answer"><div class="faq-answer-inner">
+              <p>
+                Yes - a native macOS <code>.app</code> built with Electron 35. It embeds the same
+                Express server in-process and renders the built React client in a native window,
+                so it is the same dashboard with macOS-native lifecycle on top: a menu-bar icon,
+                a native app menu, auto-start at login, a single-instance lock, and
+                window-close-hides-but-server-keeps-running. It also installs Claude Code hooks
+                and starts background services on first boot, so you get monitoring with
+                essentially zero manual setup. Get it by downloading the
+                <code>ClaudeCodeMonitor-dmg</code> CI artifact or building locally with
+                <code>npm run desktop:dmg:arm64</code> / <code>:x64</code> (fast) or
+                <code>npm run desktop:dmg</code> (universal, slow). The DMG is ad-hoc signed, so
+                clear Gatekeeper on first launch with
+                <code>xattr -cr "/Applications/Claude Code Monitor.app"</code>. Your SQLite
+                database lives in <code>~/Library/Application Support/Claude Code Monitor/data/</code>
+                outside the <code>.app</code> bundle, so it survives reinstalls and updates, and the
+                app recovers your shell <code>PATH</code> at startup so <em>Run Claude</em> can
+                launch the <code>claude</code> CLI. macOS only for now - see the
+                <a href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/blob/master/DESKTOP.md" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">desktop app guide</a>.
+              </p>
+            </div></div>
+          </details>
+          <details class="faq-item">
             <summary>What about scaling / multi-user?</summary>
             <div class="faq-answer"><div class="faq-answer-inner">
               <p>
@@ -3420,7 +3750,7 @@
               <p>
                 See every session, agent, and tool call as it happens. Spawn and resume Claude from
                 your browser. Inspect every plugin, skill, hook, and setting in 12 tabs. All on
-                your machine — no telemetry, no signup, no cloud.
+                your machine - no telemetry, no signup, no cloud.
               </p>
               <div class="big-cta-buttons">
                 <a href="#install" class="btn btn-primary">
@@ -3828,12 +4158,19 @@
       window.addEventListener("resize", updateActive, { passive: true });
       updateActive();
       function copyInstall(btn) {
-        const text = `git clone https://github.com/hoangsonww/Claude-Code-Agent-Monitor
+        const defaultText = `git clone https://github.com/hoangsonww/Claude-Code-Agent-Monitor
 cd Claude-Code-Agent-Monitor
 npm run setup
 npm run install-hooks
 npm run dev
 # then open http://localhost:4820`;
+        // Prefer the actual rendered code block this button belongs to, so the
+        // Install and Desktop-app code windows each copy their own commands.
+        const win = btn.closest(".code-window");
+        const block = win ? win.querySelector(".code-block") : null;
+        const text = block
+          ? block.innerText.replace(/^\$\s?/gm, "").replace(/^→\s?/gm, "").trimEnd()
+          : defaultText;
         const label = btn.querySelector(".copy-label");
         const svgEl = btn.querySelector("svg");
         const copySvg = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />';

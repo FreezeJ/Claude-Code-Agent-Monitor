@@ -1,0 +1,10 @@
+node_modules/
+out/
+release/
+*.log
+.DS_Store
+
+# Generated icon binaries — regenerable from assets/icon.svg via scripts/build-icons.sh.
+# Committed copies live alongside the SVG so users without iconutil can still build.
+# Local rebuilds are ignored.
+assets/icon.iconset/

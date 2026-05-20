@@ -531,6 +531,27 @@ function sendToServer(hookType, payload) {
 }
 ```
 
+> **Port resolution & fan-out.** The snippet above shows a single fixed `4820`
+> for clarity. The real `scripts/hook-handler.js` resolves **every** live
+> dashboard at runtime via `server/lib/server-info.js`:
+>
+> 1. If `CLAUDE_DASHBOARD_PORT` is set in the environment, the handler treats
+>    it as an explicit operator override and POSTs to that single port —
+>    no discovery, no fan-out (useful for tests and container setups).
+> 2. Otherwise it reads `~/.claude/.agent-dashboard.json`, a JSON document
+>    that lists every dashboard server currently running on the machine.
+>    Each server appends its `{port, pid, startedAt}` entry on startup and
+>    removes it on a clean shutdown. The handler **prunes any entry whose
+>    PID is no longer alive** (so a crashed server self-evicts the next
+>    time anyone reads the file) and POSTs the hook payload to every
+>    remaining entry **in parallel**.
+> 3. If neither yields a target, the handler falls back to `4820`.
+>
+> This is what lets the macOS desktop app coexist with `npm run dev` (or
+> two `npm start` instances on different ports) without either dashboard
+> losing its real-time stream — both receive the same events and update
+> simultaneously.
+
 ---
 
 ## Event Processing

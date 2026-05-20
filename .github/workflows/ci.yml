@@ -4,8 +4,16 @@
 # 1. Format Check: Ensures code adheres to formatting standards.
 # 2. Tests: Runs server and client tests to validate functionality.
 # 3. Build: Builds the client application and uploads the artifact.
-# 4. Docker Build & Push: Builds a Docker image and pushes it to GitHub Container Registry (GHCR) on pushes to main/master branches.
-# 5. Pipeline Summary: Compiles results from all stages and posts a summary to the GitHub Actions step summary, including status
+# 4. Detect Changed Paths: A `dorny/paths-filter` job that flags `desktop/**` (or workflow) changes so the desktop job below stays
+#    path-filtered without hard-coding a branch name.
+# 5. macOS Desktop (DMG): Builds the Electron desktop app on `macos-latest` and uploads the universal `ClaudeCodeMonitor-dmg`
+#    artifact. Runs on any push, when the changes job flagged `desktop/**`, or when a PR carries the `desktop` label. The build is
+#    resilient to flaky `hdiutil detach` (retries up to 3 times, force-detaching stale volumes between attempts).
+# 6. Docker Build & Push: Builds a Docker image and pushes it to GitHub Container Registry (GHCR) on pushes to main/master branches.
+# 7. Release: On a successful push to the default branch, publishes a GitHub Release tagged vX.Y.Z (matching the existing v1.0.0 /
+#    v1.1.0 convention, drawn from the root package.json `version`) with the macOS DMG attached — but only if no release exists for
+#    that version yet, so bumping the version is what cuts a new release and re-running master with an unchanged version is a no-op.
+# 8. Pipeline Summary: Compiles results from all stages and posts a summary to the GitHub Actions step summary, including status
 #    icons, commit details, and links to artifacts if applicable.
 # Any failure in the stages will cause the pipeline to fail, ensuring that only well-formatted, tested, and built code is merged and deployed.
 # NOTE: Not to be confused with the action files in `deployments/ci/` which are for deployment-related tasks. This workflow focuses on CI/CD for the codebase itself.
@@ -90,6 +98,108 @@ jobs:
           retention-days: 7
 
   # ────────────────────────────────────────────────────────────────
+  #  🔎 Detect changed paths                                       #
+  #   Drives the path-filtered desktop job below without relying   #
+  #   on a hard-coded branch name.                                 #
+  # ────────────────────────────────────────────────────────────────
+  changes:
+    name: "🔎 Detect changed paths"
+    runs-on: ubuntu-latest
+    outputs:
+      desktop: ${{ steps.filter.outputs.desktop }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            desktop:
+              - 'desktop/**'
+              - '.github/workflows/ci.yml'
+
+  # ────────────────────────────────────────────────────────────────
+  #  🍎 macOS Desktop App (Electron DMG)                           #
+  #   Runs when desktop/** changes, when the PR carries the        #
+  #   'desktop' label, or on any push. Produces a downloadable     #
+  #   .dmg artifact for QA.                                        #
+  # ────────────────────────────────────────────────────────────────
+  desktop:
+    name: "🍎 macOS Desktop (DMG)"
+    runs-on: macos-latest
+    needs: [build, changes]
+    if: |
+      github.event_name == 'push' ||
+      needs.changes.outputs.desktop == 'true' ||
+      contains(toJSON(github.event.pull_request.labels.*.name), 'desktop')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install client dependencies & build client
+        run: |
+          cd client && npm ci
+          cd .. && npm run build
+
+      - name: Install desktop dependencies
+        run: cd desktop && npm ci
+
+      - name: Build desktop (tsc)
+        run: cd desktop && npm run build
+
+      - name: Smoke test
+        run: cd desktop && npm test
+
+      - name: Quiet Spotlight (reduces flaky hdiutil detach)
+        # Spotlight indexing a freshly-mounted DMG volume is the usual cause of
+        # electron-builder's `hdiutil detach` failing as "busy". Disabling it on
+        # the ephemeral runner is harmless.
+        run: sudo mdutil -a -i off || true
+
+      - name: Build DMG
+        # electron-builder finalizes the DMG by running `hdiutil detach` on the
+        # temp build volume, which is intermittently flaky on GitHub macOS
+        # runners ("unable to execute hdiutil ... detach"). Retry the whole
+        # build, force-detaching any stale volume between attempts.
+        run: |
+          cd desktop
+          for attempt in 1 2 3; do
+            echo "::group::DMG build attempt ${attempt}/3"
+            if npm run dmg; then
+              echo "::endgroup::"
+              exit 0
+            fi
+            echo "::endgroup::"
+            echo "DMG build attempt ${attempt} failed; detaching stale volumes"
+            for vol in "/Volumes/Claude Code Monitor"*; do
+              [ -d "${vol}" ] && hdiutil detach -force "${vol}" || true
+            done
+            sleep 10
+          done
+          echo "DMG build failed after 3 attempts" >&2
+          exit 1
+        env:
+          # If these are set as repo secrets, electron-builder will sign +
+          # notarize automatically via desktop/scripts/notarize.js.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeCodeMonitor-dmg
+          path: desktop/release/*.dmg
+          retention-days: 14
+
+  # ────────────────────────────────────────────────────────────────
   #  🐳 Docker Build & Push to GHCR                                #
   #   Only pushes on push to main/master (not PRs)                 #
   # ────────────────────────────────────────────────────────────────
@@ -134,6 +244,81 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ────────────────────────────────────────────────────────────────
+  #  🚢 Publish GitHub Release                                      #
+  #   On a successful push to the default branch, publish a Release #
+  #   for the current package.json version (tagged vX.Y.Z, matching #
+  #   the existing v1.0.0 / v1.1.0 convention) and attach the macOS  #
+  #   DMG built by the desktop job. The release is created only when #
+  #   no release exists for that version yet — so bumping `version`  #
+  #   in package.json is what cuts a new release, and re-running     #
+  #   master with an unchanged version is a safe no-op.              #
+  # ────────────────────────────────────────────────────────────────
+  release:
+    name: "🚢 Publish Release"
+    runs-on: ubuntu-latest
+    needs: [desktop]
+    if: |
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    permissions:
+      contents: write
+    concurrency:
+      # Serialize release publishing per branch so two close pushes can't race
+      # to create the same tag.
+      group: publish-release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version and release tag
+        id: ver
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ -z "${VERSION}" ]; then
+            echo "::error::Could not read a version from package.json"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: v${VERSION}"
+
+      - name: Check whether the release already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.ver.outputs.tag }} already exists — nothing to publish."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Release ${{ steps.ver.outputs.tag }} does not exist — it will be published."
+          fi
+
+      - name: Download macOS DMG artifact
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          name: ClaudeCodeMonitor-dmg
+          path: dmg
+
+      - name: Publish release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          echo "Publishing ${TAG} with assets:"
+          ls -la dmg
+          gh release create "${TAG}" \
+            --target "${{ github.sha }}" \
+            --title "${TAG}" \
+            --generate-notes \
+            --latest \
+            dmg/*.dmg
+          echo "Published ${TAG} → ${{ github.server_url }}/${{ github.repository }}/releases/tag/${TAG}"
+
+  # ────────────────────────────────────────────────────────────────
   #  🎉 Pipeline Summary                                            #
   #   Runs after all jobs — reports final status to step summary    #
   # ────────────────────────────────────────────────────────────────
@@ -141,7 +326,7 @@ jobs:
     name: "🎉 Pipeline Status"
     if: always()
     runs-on: ubuntu-latest
-    needs: [format, test, build, docker]
+    needs: [format, test, build, desktop, docker, release]
     steps:
       - name: Determine overall result
         id: result
@@ -150,17 +335,23 @@ jobs:
           FORMAT="${{ needs.format.result }}"
           TEST="${{ needs.test.result }}"
           BUILD="${{ needs.build.result }}"
+          DESKTOP="${{ needs.desktop.result }}"
           DOCKER="${{ needs.docker.result }}"
+          RELEASE="${{ needs.release.result }}"
 
           echo "format=$FORMAT" >> "$GITHUB_OUTPUT"
           echo "test=$TEST" >> "$GITHUB_OUTPUT"
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          echo "desktop=$DESKTOP" >> "$GITHUB_OUTPUT"
           echo "docker=$DOCKER" >> "$GITHUB_OUTPUT"
+          echo "release=$RELEASE" >> "$GITHUB_OUTPUT"
 
-          # Overall: fail if any required job failed
-          if [[ "$FORMAT" == "failure" || "$TEST" == "failure" || "$BUILD" == "failure" || "$DOCKER" == "failure" ]]; then
+          # Overall: fail if any required job failed. Desktop and release are
+          # treated as non-blocking when skipped (desktop is path-filtered out
+          # for non-desktop PRs; release runs only on the default branch).
+          if [[ "$FORMAT" == "failure" || "$TEST" == "failure" || "$BUILD" == "failure" || "$DESKTOP" == "failure" || "$DOCKER" == "failure" || "$RELEASE" == "failure" ]]; then
             echo "overall=failure" >> "$GITHUB_OUTPUT"
-          elif [[ "$FORMAT" == "cancelled" || "$TEST" == "cancelled" || "$BUILD" == "cancelled" || "$DOCKER" == "cancelled" ]]; then
+          elif [[ "$FORMAT" == "cancelled" || "$TEST" == "cancelled" || "$BUILD" == "cancelled" || "$DESKTOP" == "cancelled" || "$DOCKER" == "cancelled" || "$RELEASE" == "cancelled" ]]; then
             echo "overall=cancelled" >> "$GITHUB_OUTPUT"
           else
             echo "overall=success" >> "$GITHUB_OUTPUT"
@@ -181,7 +372,9 @@ jobs:
           echo "format=$(icon ${{ steps.result.outputs.format }})" >> "$GITHUB_OUTPUT"
           echo "test=$(icon ${{ steps.result.outputs.test }})" >> "$GITHUB_OUTPUT"
           echo "build=$(icon ${{ steps.result.outputs.build }})" >> "$GITHUB_OUTPUT"
+          echo "desktop=$(icon ${{ steps.result.outputs.desktop }})" >> "$GITHUB_OUTPUT"
           echo "docker=$(icon ${{ steps.result.outputs.docker }})" >> "$GITHUB_OUTPUT"
+          echo "release=$(icon ${{ steps.result.outputs.release }})" >> "$GITHUB_OUTPUT"
           echo "overall=$(icon ${{ steps.result.outputs.overall }})" >> "$GITHUB_OUTPUT"
 
       - name: Write pipeline summary
@@ -199,7 +392,9 @@ jobs:
           | Formatting | ${{ steps.icons.outputs.format }} \`${{ steps.result.outputs.format }}\` | \`format\` |
           | Tests | ${{ steps.icons.outputs.test }} \`${{ steps.result.outputs.test }}\` | \`test\` |
           | Client Build | ${{ steps.icons.outputs.build }} \`${{ steps.result.outputs.build }}\` | \`build\` |
+          | macOS Desktop | ${{ steps.icons.outputs.desktop }} \`${{ steps.result.outputs.desktop }}\` | \`desktop\` |
           | Docker | ${{ steps.icons.outputs.docker }} \`${{ steps.result.outputs.docker }}\` | \`docker\` |
+          | Release | ${{ steps.icons.outputs.release }} \`${{ steps.result.outputs.release }}\` | \`release\` |
 
           | Detail | Value |
           |--------|-------|

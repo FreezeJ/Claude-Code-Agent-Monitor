@@ -461,6 +461,38 @@
         word-break: break-word;
         overflow-wrap: anywhere;
       }
+
+      /* Inline accent-chip used for download / CI-run links. Inline styles
+         can't express :hover, so a real class is needed for the interactive
+         states. Uses color-mix() for an accent-tinted hover fill that
+         adapts to whatever --accent the theme defines. */
+      .dl-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--accent);
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.92em;
+        vertical-align: baseline;
+        transition: background-color 120ms ease, box-shadow 120ms ease, transform 80ms ease;
+      }
+      .dl-chip:hover,
+      .dl-chip:focus-visible {
+        background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+        text-decoration: none;
+        outline: none;
+      }
+      .dl-chip:active {
+        transform: translateY(1px);
+      }
+      .dl-chip svg {
+        flex: 0 0 auto;
+      }
     </style>
 
     <!-- Mermaid: deferred (3.2 MB bundle) so it doesn't render-block first
@@ -549,6 +581,7 @@
             ><span class="nav-icon">◈</span>Statusline Utility</a
           >
           <a href="#vscode-ext" class="nav-link"><span class="nav-icon">◈</span>VS Code Extension</a>
+          <a href="#desktop-app" class="nav-link"><span class="nav-icon">◈</span>macOS Desktop App</a>
           <a href="#settings-page" class="nav-link"><span class="nav-icon">◈</span>Settings Page</a>
           <a href="#update-notifier" class="nav-link"><span class="nav-icon">◈</span>Update Notifier</a>
           <a href="#connection-status" class="nav-link"><span class="nav-icon">◈</span>Connection Status</a>
@@ -679,6 +712,21 @@
                 <span class="tech-badge badge-vscode">VS Code Extension</span>
                 <span class="tech-badge badge-claude">Claude Code</span>
                 <span class="tech-badge badge-claude">Claude Plugins</span>
+                <span class="tech-badge badge-claude">Claude CLI</span>
+                <span class="tech-badge badge-node">Electron 35</span>
+                <span class="tech-badge badge-node">electron-builder</span>
+                <span class="tech-badge badge-node">web-push (VAPID)</span>
+                <span class="tech-badge badge-node">multer</span>
+                <span class="tech-badge badge-node">swagger-ui-express</span>
+                <span class="tech-badge badge-node">adm-zip</span>
+                <span class="tech-badge badge-node">tar</span>
+                <span class="tech-badge badge-node">cors</span>
+                <span class="tech-badge badge-node">ws</span>
+                <span class="tech-badge badge-node">uuid</span>
+                <span class="tech-badge badge-node">concurrently</span>
+                <span class="tech-badge badge-node">SMAppService</span>
+                <span class="tech-badge badge-node">macOS native APIs</span>
+                <span class="tech-badge badge-node">Chromium (Electron)</span>
                 <span class="tech-badge badge-mit">MIT License</span>
               </div>
               <div class="marquee-content" aria-hidden="true">
@@ -728,6 +776,21 @@
                 <span class="tech-badge badge-vscode">VS Code Extension</span>
                 <span class="tech-badge badge-claude">Claude Code</span>
                 <span class="tech-badge badge-claude">Claude Plugins</span>
+                <span class="tech-badge badge-claude">Claude CLI</span>
+                <span class="tech-badge badge-node">Electron 35</span>
+                <span class="tech-badge badge-node">electron-builder</span>
+                <span class="tech-badge badge-node">web-push (VAPID)</span>
+                <span class="tech-badge badge-node">multer</span>
+                <span class="tech-badge badge-node">swagger-ui-express</span>
+                <span class="tech-badge badge-node">adm-zip</span>
+                <span class="tech-badge badge-node">tar</span>
+                <span class="tech-badge badge-node">cors</span>
+                <span class="tech-badge badge-node">ws</span>
+                <span class="tech-badge badge-node">uuid</span>
+                <span class="tech-badge badge-node">concurrently</span>
+                <span class="tech-badge badge-node">SMAppService</span>
+                <span class="tech-badge badge-node">macOS native APIs</span>
+                <span class="tech-badge badge-node">Chromium (Electron)</span>
                 <span class="tech-badge badge-mit">MIT License</span>
               </div>
             </div>
@@ -1178,6 +1241,21 @@
                     VAPID push pipeline. Landing and wiki SWs precache their shells and lazy-
                     cache images for offline access after one visit. SVG icons with
                     <code>sizes="any"</code> and iOS standalone meta tags included.
+                  </p>
+                </div>
+                <div class="feature-card">
+                  <div class="feature-icon ic-cyan">🍎</div>
+                  <h3 id="feat-desktop-app">macOS Desktop App</h3>
+                  <p>
+                    A native macOS <code>.app</code> (shipped as a <code>.dmg</code>) built with
+                    Electron 35. It <strong>embeds the Express server in-process</strong> —
+                    <code>require()</code>-ing <code>server/index.js</code> directly, with no
+                    child process and no IPC — and renders the built React client in a
+                    <code>BrowserWindow</code>. Adds a menu-bar (tray) icon, a native macOS app
+                    menu, auto-start at login via macOS Login Items, and single-instance lock.
+                    Closing the window hides it while the server keeps running, and the app
+                    auto-installs Claude Code hooks on first boot so a DMG-only user gets events
+                    flowing without a checkout.
                   </p>
                 </div>
               </div>
@@ -1827,6 +1905,41 @@ npm run mcp:start:repl         # interactive CLI with tab completion</code></pre
                   <td><code>test:mcp</code></td>
                   <td><code>npm run test:mcp</code></td>
                   <td>Run MCP server unit tests</td>
+                </tr>
+                <tr>
+                  <td><code>desktop:install</code></td>
+                  <td><code>npm run desktop:install</code></td>
+                  <td>Install Electron + electron-builder under <code>desktop/</code>; rebuilds <code>better-sqlite3</code> for Electron's ABI</td>
+                </tr>
+                <tr>
+                  <td><code>desktop:build</code></td>
+                  <td><code>npm run desktop:build</code></td>
+                  <td>Prebuild guard + <code>tsc</code> compile of the Electron main process into <code>desktop/out/</code></td>
+                </tr>
+                <tr>
+                  <td><code>desktop:dev</code></td>
+                  <td><code>npm run desktop:dev</code></td>
+                  <td>Build, then launch the desktop app against <code>desktop/out/main.js</code></td>
+                </tr>
+                <tr>
+                  <td><code>desktop:test</code></td>
+                  <td><code>npm run desktop:test</code></td>
+                  <td>Desktop smoke test — spawn Electron and probe <code>/api/health</code></td>
+                </tr>
+                <tr>
+                  <td><code>desktop:dmg</code></td>
+                  <td><code>npm run desktop:dmg</code></td>
+                  <td>Build a <strong>universal</strong> (x64 + arm64) DMG. Correct for release — intentionally slow</td>
+                </tr>
+                <tr>
+                  <td><code>desktop:dmg:arm64</code></td>
+                  <td><code>npm run desktop:dmg:arm64</code></td>
+                  <td>Build an Apple-Silicon-only DMG — fast (~1 min), recommended for a single machine</td>
+                </tr>
+                <tr>
+                  <td><code>desktop:dmg:x64</code></td>
+                  <td><code>npm run desktop:dmg:x64</code></td>
+                  <td>Build an Intel-only DMG — fast</td>
                 </tr>
                 <tr>
                   <td><code>format</code></td>
@@ -3654,7 +3767,7 @@ ccam-export all --output backup.json</code></pre>
           </div>
 
           <p>
-            📖 Full documentation: <a href="docs/PLUGINS.md"><code>docs/plugins.md</code></a>
+            📖 Full documentation: <a href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/blob/master/docs/PLUGINS.md"><code>docs/plugins.md</code></a>
           </p>
         </section>
 
@@ -3857,7 +3970,393 @@ ccam-export all --output backup.json</code></pre>
           </div>
 
           <p>
-            📖 Full developer guide: <a href="vscode-extension/README.md"><code>vscode-extension/README.md</code></a>
+            📖 Full developer guide: <a href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/blob/master/vscode-extension/README.md"><code>vscode-extension/README.md</code></a>
+          </p>
+        </section>
+
+        <!-- ─── macOS Desktop App ──────────────────────────────────────────── -->
+        <section id="desktop-app">
+          <div class="section-label">◈ Integrations</div>
+          <h2>macOS Desktop App</h2>
+
+          <p>
+            The dashboard ships as an optional <strong>native macOS application</strong> — a
+            <code>desktop/</code> workspace that wraps the existing server and client into a
+            single <code>.app</code> (distributed as a <code>.dmg</code>) you install once and
+            forget. <code>desktop/</code> is a sibling workspace to <code>client/</code>,
+            <code>server/</code>, <code>mcp/</code>, and <code>vscode-extension/</code>, built
+            with <strong>Electron 35</strong>. It <strong>embeds the Express server
+            in-process</strong> — it <code>require()</code>s <code>server/index.js</code>
+            directly in the same Node runtime as the Electron main process (no child process,
+            no IPC) — and renders the already-built React client in a
+            <code>BrowserWindow</code>. Everything you see in the browser at
+            <code>localhost:4820</code> lives inside this window, with macOS-native lifecycle
+            on top.
+          </p>
+
+          <div class="screenshot-card" style="margin: 8px 0 32px;">
+            <img src="../images/macos.png" alt="Claude Code Monitor running as a native macOS desktop app" width="100%" loading="lazy" decoding="async" />
+            <div class="screenshot-caption"><span class="caption-icon">🍎</span> <span>The dashboard as a native macOS <code>.app</code> — menu-bar (tray) icon, Open-at-Login, single-instance lock, and the same Express server embedded in-process. Distributed as a universal DMG via GitHub Releases — see <a href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/blob/master/DESKTOP.md"><code>DESKTOP.md</code></a></span></div>
+          </div>
+
+          <div class="callout callout-info">
+            <div class="callout-icon">ℹ</div>
+            <div class="callout-body">
+              <strong>One-line mental model</strong>
+              <p>
+                <em>Electron is a window onto the same code.</em> The desktop app does not
+                reimplement the dashboard — it hosts the exact server and client the
+                standalone deployment runs. The only change outside <code>desktop/</code> is a
+                behavior-preserving refactor of <code>server/index.js</code>: its post-listen
+                bootstrap was extracted into an exported <code>startBackgroundServices()</code>
+                so the embedded server runs exactly what <code>node server/index.js</code>
+                runs.
+              </p>
+            </div>
+          </div>
+
+          <h3>In-Process Architecture</h3>
+          <p>
+            The Electron main process hosts the embedded server <em>and</em> manages the
+            window, tray, and menus. The renderer is just Chromium loading
+            <code>http://127.0.0.1:&lt;port&gt;</code> — the same origin a normal browser
+            would use.
+          </p>
+
+          <div class="diagram-wrap">
+            <!-- prettier-ignore -->
+            <div class="mermaid">
+              flowchart LR
+                OS["macOS\nlaunch / Login Items"]:::mid --> MAIN["Electron Main Process\n(Node 22 / Electron 35)"]:::accent
+                MAIN --> HOST["server-host.ts\nport discovery + adopt"]:::mid
+                HOST -->|"require() in-process"| SRV["server/index.js\nExpress + WS + SQLite"]:::mid
+                MAIN --> TRAY["Tray icon\n+ app menu"]:::mid
+                MAIN --> WIN["BrowserWindow\nReact dashboard"]:::ui
+                SRV -->|"http + ws on 127.0.0.1:port"| WIN
+                HOOKS["Claude Code hooks"]:::mid -->|"POST /api/hooks/event"| SRV
+
+                classDef mid fill:#1a1a2b,stroke:#2e2e48,color:#e2e2f0
+                classDef accent fill:#6366f1,stroke:#818cf8,color:#fff
+                classDef ui fill:#10b981,stroke:#34d399,color:#fff
+            </div>
+            <p class="diagram-label">
+              The desktop app embeds the Express server in-process — no child process, no IPC
+            </p>
+          </div>
+
+          <h3>What It Adds</h3>
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="feature-icon ic-cyan">📍</div>
+              <h3>Menu-Bar (Tray) Icon</h3>
+              <p>
+                An always-on menu-bar icon. A single click (left or right) opens a dropdown
+                with a <strong>live status snapshot</strong> queried straight from SQLite at
+                click time — server port, active sessions, working agents, events today —
+                followed by <strong>Open Dashboard</strong>, <strong>Open in Browser</strong>,
+                <strong>Restart Server</strong>, <strong>Show Logs</strong>,
+                <strong>Open at Login</strong> (toggle), and <strong>Quit</strong>. The
+                snapshot rows are clickable — they open the dashboard. The menu is rebuilt on
+                each open so every value is current.
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon ic-violet">🍎</div>
+              <h3>Native App Menu</h3>
+              <p>
+                A standard macOS application menu — <code>About</code>, <code>Open at
+                Login</code>, <code>File</code>, <code>Edit</code>, <code>View</code>,
+                <code>Window</code>, <code>Help</code> — with <code>⌘R</code> wired to
+                <em>View ▸ reload</em>. External links open in the system browser, never
+                inside Electron.
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon ic-emerald">🔁</div>
+              <h3>Auto-Start at Login</h3>
+              <p>
+                Flip <em>Open at Login</em> in the tray or app menu to register the app via
+                macOS's <code>SMAppService</code> API — it appears under
+                <strong>System Settings → General → Login Items</strong>. When macOS launches
+                the app at login it starts tray-only, with no window jumping into view.
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon ic-amber">🪟</div>
+              <h3>Close Hides, Server Stays Up</h3>
+              <p>
+                Closing the window hides it — the embedded server keeps running, the tray icon
+                stays, and the dock icon stays too (a clickable "still alive" indicator).
+                <strong>Quit</strong> (<code>⌘Q</code>, app menu, or tray → Quit) pops a
+                confirmation modal — press the Quit button or hit <code>⌘Q</code> a second
+                time to skip the prompt — and only then does the embedded server shut down,
+                closing SQLite cleanly with a WAL checkpoint and removing this PID's entry
+                from the discovery file.
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon ic-teal">🔀</div>
+              <h3>Runs Alongside the Web Dashboard</h3>
+              <p>
+                Launch the desktop app and <code>npm run dev</code> at the same time and both
+                stay real-time. Each server appends its <code>{port, pid, startedAt}</code>
+                entry to <code>~/.claude/.agent-dashboard.json</code> on startup; the Claude
+                Code hook handler reads that list and fan-outs every event to every live entry
+                in parallel. Stale entries self-evict via a PID liveness check on read, so a
+                crashed server can't misroute events to a dead port.
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon ic-indigo">🔒</div>
+              <h3>Single-Instance Lock</h3>
+              <p>
+                Double-launching the app just focuses the existing window — no second server,
+                no port collision. The lock is acquired via
+                <code>requestSingleInstanceLock()</code> before any server boots.
+              </p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon ic-pink">🪝</div>
+              <h3>First-Boot Bootstrap</h3>
+              <p>
+                On its first owned-server boot the app auto-installs the Claude Code hooks
+                into <code>~/.claude/settings.json</code> and starts the background services
+                (update scheduler, config watcher, orphaned-run reconciliation) — so a
+                DMG-only user gets events flowing without ever running
+                <code>npm run install-hooks</code> from a checkout.
+              </p>
+            </div>
+          </div>
+
+          <h3>Data Persistence &amp; CLI Reliability</h3>
+          <p>
+            Two macOS packaging realities — a read-only <code>.app</code> bundle and the
+            minimal <code>PATH</code> a Finder-launched app inherits — are handled
+            automatically so installs survive updates and the <strong>Run Claude</strong>
+            feature works out of the box.
+          </p>
+
+          <div class="callout callout-info">
+            <div class="callout-icon">ℹ</div>
+            <div class="callout-body">
+              <strong>Your data survives reinstalls and updates</strong>
+              <p>
+                The SQLite database and VAPID keys live in
+                <code>~/Library/Application Support/Claude Code Monitor/data/</code> —
+                <em>outside</em> the <code>.app</code> bundle. <code>server-host.ts</code>
+                points <code>DASHBOARD_DATA_DIR</code> at that per-user directory on boot.
+                Because a packaged, code-signed, or app-translocated bundle is read-only,
+                older builds that stored the database inside the bundle broke History
+                Import; with the data directory now in Application Support, your imported
+                history and events persist across app reinstalls and updates. After
+                upgrading from a pre-fix build, re-run <strong>Import History → Rescan</strong>
+                once to bridge the one-time gap.
+              </p>
+            </div>
+          </div>
+
+          <div class="callout callout-info">
+            <div class="callout-icon">ℹ</div>
+            <div class="callout-body">
+              <strong>The <code>claude</code> CLI is found automatically</strong>
+              <p>
+                A Finder- or Dock-launched macOS app inherits only launchd's minimal
+                <code>PATH</code>, not your login shell's. At startup
+                <code>shell-path.ts</code> recovers the user's login-shell <code>PATH</code>
+                so the <strong>Run Claude</strong> feature can locate and spawn the
+                <code>claude</code> CLI. If it still cannot be found, make sure
+                <code>claude</code> is a real executable on your shell <code>PATH</code> — a
+                shell alias or function cannot be spawned — and check the
+                <code>user PATH resolved</code> line in
+                <code>~/Library/Logs/Claude Code Monitor/desktop.log</code>.
+              </p>
+            </div>
+          </div>
+
+          <h3>Port Discovery</h3>
+          <p>
+            On launch the Electron main process picks a free port. If a healthy dashboard
+            server already answers <code>/api/health</code> on port <code>4820</code> (for
+            example, you ran <code>npm start</code> in a terminal), the app
+            <strong>adopts</strong> that server instead of starting a second one — no
+            double-binding, no SQLite contention. An adopted server is not owned by the app,
+            so quitting leaves it running.
+          </p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Step</th>
+                  <th>Port choice</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Adopt</td>
+                  <td>A healthy server already on <code>4820</code> is adopted as-is</td>
+                </tr>
+                <tr>
+                  <td>Preferred</td>
+                  <td><code>4820</code> when free</td>
+                </tr>
+                <tr>
+                  <td>Fallback</td>
+                  <td>The first free port in <code>4821</code>–<code>4829</code></td>
+                </tr>
+                <tr>
+                  <td>Last resort</td>
+                  <td>A random high port when all of the above are taken</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>How to Get It</h3>
+          <p>
+            Three ways to obtain the desktop app — the latest GitHub Release (best for
+            most users), a per-commit CI artifact (fresher than the latest release), or a
+            local build.
+          </p>
+
+          <h4>Option A — download the latest GitHub Release (recommended)</h4>
+          <p>
+            Open
+            <a href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/releases/latest"
+               target="_blank" rel="noopener noreferrer"
+               class="dl-chip">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Releases → latest
+            </a>
+            and download
+            <code>ClaudeCodeMonitor-&lt;version&gt;-universal.dmg</code> from the assets. The
+            macOS Desktop CI job auto-publishes a new <code>vX.Y.Z</code> release every time
+            the version in <code>package.json</code> is bumped on <code>master</code>, so this
+            link always points at the current build. Releases are public — no GitHub sign-in
+            required.
+          </p>
+
+          <h4>Option B — per-commit CI artifact</h4>
+          <p>
+            Want a build straight off the tip of <code>master</code>, ahead of the next tagged
+            release? Every green run of the <code>🍎 macOS Desktop (DMG)</code> job on
+            <code>macos-latest</code> uploads the universal DMG as the
+            <code>ClaudeCodeMonitor-dmg</code> workflow artifact. Open the
+            <a href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/actions/workflows/ci.yml?query=branch%3Amaster+is%3Asuccess"
+               target="_blank" rel="noopener noreferrer"
+               class="dl-chip">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              latest passing run
+            </a>,
+            scroll to its Artifacts section, and download
+            <code>ClaudeCodeMonitor-dmg</code>. (GitHub sign-in required; 14-day retention.)
+          </p>
+
+          <h4>Option C — build locally</h4>
+          <p>
+            From the project root, after <code>git clone</code>:
+          </p>
+          <div class="code-header"><span class="code-lang">bash</span></div>
+          <pre><code># 1. Install root + client + vscode-extension deps
+npm run setup
+
+# 2. Build the React client (the SPA the Electron window loads)
+npm run build
+
+# 3. Install Electron + electron-builder under desktop/
+npm run desktop:install
+
+# 4. Build a DMG — pick ONE:
+npm run desktop:dmg:arm64    # Apple Silicon only — fast (~1 min), recommended
+npm run desktop:dmg:x64      # Intel only — fast
+npm run desktop:dmg          # universal (x64 + arm64) — for release, SLOW
+
+# Each desktop:dmg* build wipes release/ first and emits a single arch-labelled
+# DMG, so the volume title states the architecture (e.g. "Claude Code Monitor
+# (Apple Silicon)") — no ambiguity when more than one DMG is on disk.
+open desktop/release/ClaudeCodeMonitor-*-arm64.dmg   # match the arch you built</code></pre>
+
+          <div class="callout callout-warning">
+            <div class="callout-icon">⚠</div>
+            <div class="callout-body">
+              <strong>Use the arch-specific build on your own machine</strong>
+              <p>
+                The universal <code>desktop:dmg</code> build is intentionally slow: it builds
+                the full app tree <em>twice</em> (once per architecture), merges both with
+                <code>@electron/universal</code>, and ad-hoc-signs every binary in the merged
+                bundle. For running on a single Mac, use <code>desktop:dmg:arm64</code>
+                (Apple Silicon) or <code>desktop:dmg:x64</code> (Intel) — one architecture,
+                no merge, finishing in roughly a minute instead of many. Reserve the universal
+                build for release artifacts; CI already produces one as
+                <code>ClaudeCodeMonitor-dmg</code>, so you rarely need to build it yourself.
+              </p>
+            </div>
+          </div>
+
+          <h3>Install</h3>
+          <div class="quick-start-grid">
+            <div class="qs-card">
+              <div class="qs-step">1</div>
+              <h3>Open the DMG</h3>
+              <p>Double-click the downloaded <code>.dmg</code> to mount it</p>
+            </div>
+            <div class="qs-card">
+              <div class="qs-step">2</div>
+              <h3>Drag to Applications</h3>
+              <p>Drag <code>Claude Code Monitor.app</code> into your <code>Applications</code> folder</p>
+            </div>
+            <div class="qs-card">
+              <div class="qs-step">3</div>
+              <h3>Clear Quarantine</h3>
+              <p>Run <code>xattr -cr</code> on the app to get past Gatekeeper (see below)</p>
+            </div>
+            <div class="qs-card">
+              <div class="qs-step">4</div>
+              <h3>Launch</h3>
+              <p>Open the app — the tray icon appears and the dashboard window loads</p>
+            </div>
+          </div>
+
+          <div class="callout callout-warning">
+            <div class="callout-icon">⚠</div>
+            <div class="callout-body">
+              <strong>Gatekeeper warning on first launch</strong>
+              <p>
+                The DMG is ad-hoc signed by default — that is all the project can offer
+                without a paid Apple Developer ID. macOS warns the first time you open it
+                (<em>"Apple could not verify…"</em>). Strip the quarantine attribute to get
+                past it:
+              </p>
+            </div>
+          </div>
+          <div class="code-header"><span class="code-lang">bash</span></div>
+          <pre><code># After dragging the app into /Applications:
+xattr -cr "/Applications/Claude Code Monitor.app"</code></pre>
+          <p>
+            Alternatively, open <strong>System Settings → Privacy &amp; Security</strong>,
+            find the blocked app, and click <em>Open Anyway</em>. Code signing and Apple
+            notarization are opt-in for the maintainer — when configured, this warning goes
+            away for everyone.
+          </p>
+
+          <div class="callout callout-info">
+            <div class="callout-icon">ℹ</div>
+            <div class="callout-body">
+              <strong>Bundle size</strong>
+              <p>
+                The DMG is roughly 80&nbsp;MB, about 250&nbsp;MB installed on disk — the
+                standard Electron tax. The app is macOS-only in v1; Windows and Linux are
+                tracked as follow-ups. Logs live at
+                <code>~/Library/Logs/Claude Code Monitor/desktop.log</code> (reach them from
+                the tray menu → <em>Show Logs</em>).
+              </p>
+            </div>
+          </div>
+
+          <p>
+            📖 User-facing guide: <a href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/blob/master/DESKTOP.md"><code>DESKTOP.md</code></a> ·
+            architecture &amp; contributor reference:
+            <a href="https://github.com/hoangsonww/Claude-Code-Agent-Monitor/blob/master/desktop/README.md"><code>desktop/README.md</code></a>
           </p>
         </section>
 
@@ -4215,6 +4714,20 @@ ccam-export all --output backup.json</code></pre>
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <div class="callout callout-info">
+            <div class="callout-icon">ℹ</div>
+            <div class="callout-body">
+              <strong>A third way to run: the macOS Desktop App</strong>
+              <p>
+                Beyond development and standalone production, the dashboard also ships as a
+                native macOS <code>.app</code> that embeds the same production server
+                in-process — no terminal required. See the
+                <a href="#desktop-app">macOS Desktop App</a> section for download, build, and
+                install instructions.
+              </p>
+            </div>
           </div>
 
           <h3>Container Runtime (Docker / Podman)</h3>

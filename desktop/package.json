@@ -1,0 +1,36 @@
+{
+  "name": "agent-dashboard-desktop",
+  "version": "1.1.1",
+  "private": true,
+  "description": "Native macOS desktop shell for Claude Code Agent Monitor.",
+  "author": "Son Nguyen <hoangson091104@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/hoangsonww/Claude-Code-Agent-Monitor",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hoangsonww/Claude-Code-Agent-Monitor.git"
+  },
+  "main": "out/main.js",
+  "scripts": {
+    "clean": "rm -rf out release",
+    "prebuild": "node scripts/prebuild.js",
+    "build": "npm run prebuild && tsc -p tsconfig.json",
+    "build:icons": "bash scripts/build-icons.sh",
+    "dev": "npm run build && electron out/main.js",
+    "package": "rm -rf release && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --universal --publish never --config.dmg.title='Claude Code Monitor (Universal)'",
+    "dmg": "npm run package",
+    "dmg:arm64": "rm -rf release && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --arm64 --publish never --config.dmg.title='Claude Code Monitor (Apple Silicon)'",
+    "dmg:x64": "rm -rf release && npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --x64 --publish never --config.dmg.title='Claude Code Monitor (Intel)'",
+    "test": "npm run build && node --test --test-reporter=spec tests/smoke.test.mjs",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^35.7.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.5.4"
+  }
+}

@@ -7,7 +7,12 @@ const webpush = require("web-push");
 const path = require("path");
 const fs = require("fs");
 
-const KEYS_PATH = path.join(__dirname, "../../data/vapid-keys.json");
+// Honors DASHBOARD_DATA_DIR so hosts like the desktop app can keep writable
+// state out of a read-only application bundle; defaults to the repo `data/`.
+const KEYS_PATH = path.join(
+  process.env.DASHBOARD_DATA_DIR || path.join(__dirname, "..", "..", "data"),
+  "vapid-keys.json"
+);
 
 function loadOrCreateVapidKeys() {
   if (fs.existsSync(KEYS_PATH)) {
@@ -31,9 +36,62 @@ function getPublicKey() {
   return vapidKeys.publicKey;
 }
 
+/**
+ * Fire a native OS notification when this process is the Electron main process
+ * (i.e. the desktop app embeds the server in-process). Web Push is unreliable
+ * inside Electron — Chromium-in-Electron ships without Firebase Cloud
+ * Messaging credentials, so `pushManager.subscribe()` in the renderer either
+ * fails or returns an endpoint that nothing can ever deliver to, leaving the
+ * `push_subscriptions` table empty. Calling Electron's main-process
+ * Notification API directly side-steps the push service entirely.
+ *
+ * Returns true when a notification was actually shown.
+ *
+ * @param {string} title
+ * @param {string} body
+ * @returns {boolean}
+ */
+function showNativeNotificationIfElectron(title, body) {
+  if (!process.versions || !process.versions.electron) return false;
+  try {
+    // `require("electron")` only resolves inside the Electron runtime; in a
+    // plain `node server/index.js` host it throws and we fall through.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Notification: ElectronNotification } = require("electron");
+    if (!ElectronNotification) return false;
+    if (
+      typeof ElectronNotification.isSupported === "function" &&
+      !ElectronNotification.isSupported()
+    ) {
+      return false;
+    }
+    new ElectronNotification({ title, body, silent: false }).show();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Dispatch a notification to every reachable surface:
+ *   - A native Electron notification when hosted inside the desktop app.
+ *   - A Web Push delivery to every subscribed browser endpoint.
+ *
+ * Both legs run unconditionally so whichever surface the user is on receives
+ * the alert. Under `npm start` the native leg is a no-op; under the desktop
+ * app the Web Push leg is typically a no-op (no FCM credentials in Electron,
+ * so `push_subscriptions` is empty).
+ *
+ * Returns `{ native, pushed, failed }` so the caller can surface what actually
+ * happened in its API response — silent failures stop looking like success.
+ */
 async function sendPushToAll(db, title, body) {
+  const native = showNativeNotificationIfElectron(title, body);
+
   const subscriptions = db.prepare("SELECT * FROM push_subscriptions").all();
-  if (subscriptions.length === 0) return;
+  if (subscriptions.length === 0) {
+    return { native, pushed: 0, failed: 0 };
+  }
 
   const payload = JSON.stringify({
     title,
@@ -53,15 +111,24 @@ async function sendPushToAll(db, title, body) {
     )
   );
 
-  // Remove subscriptions that are gone (HTTP 410)
+  // Remove subscriptions that are gone (HTTP 410); count what landed.
+  let pushed = 0;
+  let failed = 0;
   for (let index = 0; index < results.length; index++) {
     const result = results[index];
-    if (result.status === "rejected" && result.reason?.statusCode === 410) {
-      db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(
-        subscriptions[index].endpoint
-      );
+    if (result.status === "fulfilled") {
+      pushed++;
+    } else {
+      failed++;
+      if (result.reason?.statusCode === 410) {
+        db.prepare("DELETE FROM push_subscriptions WHERE endpoint = ?").run(
+          subscriptions[index].endpoint
+        );
+      }
     }
   }
+
+  return { native, pushed, failed };
 }
 
-module.exports = { getPublicKey, sendPushToAll };
+module.exports = { getPublicKey, sendPushToAll, showNativeNotificationIfElectron };

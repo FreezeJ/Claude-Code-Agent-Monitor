@@ -14,3 +14,11 @@ wiki/index.html
 *.yml
 *.yaml
 mcp/build/
+desktop/out/
+desktop/release/
+desktop/node_modules/
+desktop/package-lock.json
+desktop/assets/*.svg
+desktop/assets/*.png
+desktop/assets/*.icns
+desktop/assets/icon.iconset/
