@@ -1,3 +1,8 @@
+/**
+ * @description Service Worker for caching static assets and handling push notifications.
+ * @author Son Nguyen <hoangson091104@gmail.com>
+ */
+
 const CACHE_NAME = "dashboard-v1";
 const SHELL = ["/", "/manifest.json", "/favicon.svg"];
 
