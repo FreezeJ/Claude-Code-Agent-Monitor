@@ -1,5 +1,7 @@
 # Installation
 
+A step-by-step guide to get the Claude Code Agent Monitor up and running on your machine, with optional sections for importing history, running in a container, and using the macOS desktop app.
+
 ## Requirements
 
 | Requirement | Version | Notes |

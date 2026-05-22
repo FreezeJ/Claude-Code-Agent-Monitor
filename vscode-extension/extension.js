@@ -3,6 +3,7 @@
  * Sets up the extension, registers commands, and manages the status bar item.
  * Implements a dynamic dashboard view that checks for active servers on ports 5173 and 4820.
  * Provides real-time status updates in the sidebar and status bar with background polling.
+ *
  * @author Son Nguyen <hoangson091104@gmail.com>
  */
 
