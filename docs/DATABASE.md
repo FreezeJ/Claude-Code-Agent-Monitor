@@ -487,6 +487,26 @@ function runMigrations() {
 }
 ```
 
+### Runtime Repair Migrations
+
+In addition to schema migrations, `server/db.js` runs **idempotent data-repair
+statements** on every startup. They only touch rows where a known invariant is
+broken, so they are safe to run repeatedly and on healthy databases. Current
+repairs:
+
+| Repair | Invariant restored | Origin |
+|--------|--------------------|--------|
+| Stale active sessions | `status='active'` rows with no events in the last hour are marked `completed` | legacy sessions created before SessionEnd hook |
+| Orphaned working agents | Agents in `working`/`waiting` whose parent session has finished are marked `completed` | crash recovery |
+| **Compaction timestamp invariant** | For rows where `subagent_type='compaction'` and `ended_at < started_at`, `started_at` and `updated_at` are collapsed to `ended_at` (the transcript timestamp) | [issue #156](https://github.com/hoangsonww/Claude-Code-Agent-Monitor/issues/156) — pre-fix hook ingestion stamped `started_at` from ingestion wall clock while `ended_at` came from a past transcript timestamp, producing negative `avgDuration` in workflows analytics |
+
+To reproduce and verify the compaction repair locally:
+
+```bash
+node scripts/repro-issue-156.js            # insert a broken row, run repair, show before/after
+node scripts/repro-issue-156.js --cleanup  # remove the fixture
+```
+
 ### Migration Workflow
 
 ```mermaid

@@ -8,7 +8,7 @@
 ## Repo map
 - `server/`: Express API, hook ingestion, SQLite access, websocket broadcast (includes optional git upstream checks and `routes/updates.js`).
 - `client/`: React + Vite UI.
-- `scripts/`: hook installer/handler, import, seed, cleanup utilities, `self-update-restart.js` (pull → setup → restart).
+- `scripts/`: hook installer/handler, import, seed, cleanup utilities, `self-update-restart.js` (pull → setup → restart), `repro-issue-156.js` (repro + verify the compaction timestamp repair migration).
 - `mcp/`: local MCP server exposing dashboard operations as tools.
 
 ## Non-negotiable engineering rules

@@ -406,6 +406,7 @@ node scripts/import-history.js --project my-project
 | `clear-data` | `npm run clear-data` | Delete all data from the database |
 | `seed` | `npm run seed` | Insert demo sessions/agents/events |
 | `import-history` | `npm run import-history` | Import legacy sessions from `~/.claude/` (also runs on startup) |
+| `repro-issue-156` | `node scripts/repro-issue-156.js` | Insert a synthetic compaction row with the pre-fix broken `ended_at < started_at` invariant, then run the startup repair migration and print before/after. Pass `--cleanup` to remove the fixture |
 | `mcp:install` | `npm run mcp:install` | Install MCP package dependencies |
 | `mcp:build` | `npm run mcp:build` | Build MCP server into `mcp/build/` |
 | `mcp:start` | `npm run mcp:start` | Start MCP server (stdio, for MCP hosts) |

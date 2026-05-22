@@ -118,6 +118,10 @@ import-history: ## Import sessions from ~/.claude/ history
 clear-data: ## Delete all data rows (preserves schema)
 	node scripts/clear-data.js
 
+.PHONY: repro-issue-156
+repro-issue-156: ## Repro + verify the compaction timestamp repair (GitHub #156)
+	node scripts/repro-issue-156.js
+
 # ─── Docker / Podman ───────────────────────────────────────────────────────
 
 .PHONY: docker-build
