@@ -2,9 +2,7 @@
 /**
  * Dev orchestrator. Picks a free port for the dev server (starting at the
  * conventional 4820), exports it via `DASHBOARD_PORT`, then spawns the
- * existing concurrently pipeline. Both `dev:server` (server/index.js) and
- * `dev:client` (vite.config.ts) read the same env var, so they stay in
- * lockstep.
+ * server and client dev processes directly.
  *
  * Why this exists: on machines that hold 4820 via an SSH `LocalForward`,
  * SSH binds the loopback specifically (`127.0.0.1:4820` and `[::1]:4820`),
@@ -67,31 +65,43 @@ async function pickPort() {
     console.log(`[dev] dashboard server will listen on :${port}`);
   }
 
-  const child = spawn(
-    "npx",
-    [
-      "--no-install",
-      "concurrently",
-      "-n",
-      "server,client",
-      "-c",
-      "blue,green",
-      "npm run dev:server",
-      "npm run dev:client",
-    ],
-    {
-      stdio: "inherit",
-      env: { ...process.env, DASHBOARD_PORT: String(port) },
-    }
-  );
+  const env = { ...process.env, DASHBOARD_PORT: String(port) };
+  const isWindows = process.platform === "win32";
+  const shellOpt = isWindows ? true : undefined;
 
-  // Propagate Ctrl-C / SIGTERM so concurrently can shut both legs down
-  // gracefully instead of being orphaned.
-  for (const sig of ["SIGINT", "SIGTERM"]) {
-    process.on(sig, () => child.kill(sig));
-  }
-  child.on("exit", (code, signal) => {
-    if (signal) process.kill(process.pid, signal);
-    else process.exit(code || 0);
+  const server = spawn("npm", ["run", "dev:server"], {
+    stdio: "inherit",
+    env,
+    shell: shellOpt,
   });
+
+  const client = spawn("npm", ["run", "dev:client"], {
+    stdio: "inherit",
+    env,
+    shell: shellOpt,
+  });
+
+  // Propagate Ctrl-C / SIGTERM so both processes shut down gracefully
+  for (const sig of ["SIGINT", "SIGTERM"]) {
+    process.on(sig, () => {
+      server.kill(sig);
+      client.kill(sig);
+    });
+  }
+
+  let exitCount = 0;
+  const onExit = (code, signal) => {
+    exitCount++;
+    // If one process dies, kill the other
+    if (exitCount === 1) {
+      server.kill();
+      client.kill();
+    }
+    if (exitCount >= 2 || signal) {
+      if (signal) process.kill(process.pid, signal);
+      else process.exit(code || 0);
+    }
+  };
+  server.on("exit", onExit);
+  client.on("exit", onExit);
 })();
